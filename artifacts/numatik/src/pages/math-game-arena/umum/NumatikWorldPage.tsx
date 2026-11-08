@@ -75,13 +75,33 @@ type WorldQuestion = {
 };
 
 type Treasure = {
+  id: number;
   group: THREE.Group;
+  glow: THREE.Group;
+  beaconLight: THREE.PointLight;
   home: THREE.Vector3;
   phase: number;
   collected: boolean;
 };
 
+type IslandInhabitant = {
+  group: THREE.Group;
+  homeY: number;
+  phase: number;
+  isAnimal: boolean;
+};
+
 const TREASURE_COUNT = 5;
+const WORLD_RADIUS = 62;
+const RADAR_CENTER = 60;
+const RADAR_RADIUS = 48;
+const TREASURE_POSITIONS: Array<[number, number]> = [
+  [2, 45], [-18, 28], [20, 30], [-34, 3], [36, -7],
+];
+const toRadarCoordinates = (x: number, z: number) => ({
+  x: RADAR_CENTER + (x / WORLD_RADIUS) * RADAR_RADIUS,
+  y: RADAR_CENTER + (z / WORLD_RADIUS) * RADAR_RADIUS,
+});
 
 // Skala tunggal untuk mengatur ukuran figur tanpa menggeser telapak dari pangkal rig.
 const AVATAR_SCALE = 1;
@@ -787,6 +807,7 @@ const makeQuestion = (): WorldQuestion => {
 const NumatikWorldPage = () => {
   const navigate = useNavigate();
   const hostRef = useRef<HTMLDivElement>(null);
+  const radarPlayerRef = useRef<SVGCircleElement>(null);
   const keysRef = useRef(new Set<string>());
   const pendingTreasureRef = useRef<Treasure | null>(null);
   const gameCompleteRef = useRef(false);
@@ -799,6 +820,7 @@ const NumatikWorldPage = () => {
   const [gameStarted, setGameStarted] = useState(false);
   const [score, setScore] = useState(0);
   const [treasuresFound, setTreasuresFound] = useState(0);
+  const [collectedTreasureIds, setCollectedTreasureIds] = useState<number[]>([]);
   const [gameComplete, setGameComplete] = useState(false);
   const [question, setQuestion] = useState<WorldQuestion | null>(null);
   const [answerFeedback, setAnswerFeedback] = useState<string | null>(null);
@@ -886,10 +908,31 @@ const NumatikWorldPage = () => {
       eye: makeMaterial("#293e61"),
       pink: makeMaterial("#ff92c4", 0.2),
       chestWood: makeMaterial("#9f5834"),
+      chestGold: makeMaterial("#f6c542", 0.32),
+      treasureCoin: makeMaterial("#ffd52e", 0.22),
+      villagerSkin: makeMaterial("#f2c39b", 0.7),
+      villagerClothes: makeMaterial("#e75d58", 0.75),
+      villagerClothesAlt: makeMaterial("#4d81d5", 0.75),
+      villagerHair: makeMaterial("#493326", 0.9),
+      animalFur: makeMaterial("#d99a58", 0.85),
+      animalFurAlt: makeMaterial("#f0e2c6", 0.85),
       trunk: makeMaterial("#a86f4d"),
       leaf: makeMaterial(island.palette.leaf),
       leafLight: makeMaterial(island.palette.leafLight),
     };
+    const treasureGlowMaterial = new THREE.MeshBasicMaterial({
+      color: "#ffe66d",
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    resources.add(treasureGlowMaterial);
+    const treasureGlowGeometry = new THREE.TorusGeometry(1.12, 0.07, 8, 40);
+    const treasureOuterGlowGeometry = new THREE.TorusGeometry(1.38, 0.04, 8, 40);
+    resources.add(treasureGlowGeometry);
+    resources.add(treasureOuterGlowGeometry);
     const addMesh = <T extends THREE.BufferGeometry>(
       geometry: T,
       mat: THREE.Material,
@@ -1008,6 +1051,48 @@ const NumatikWorldPage = () => {
       addMesh(new THREE.ConeGeometry(7, 10, 9), mats.roof, scene, [0, 27, -38]);
       addMesh(new THREE.TorusGeometry(12, 1.2, 10, 36), mats.roof, scene, [0, 2.4, -38]).rotation.x = Math.PI / 2;
     }
+
+    const inhabitants: IslandInhabitant[] = [];
+    const addVillager = (x: number, z: number, clothes: THREE.Material, phase: number) => {
+      const group = new THREE.Group();
+      group.position.set(x, 1.66, z);
+      scene.add(group);
+      addMesh(new THREE.CylinderGeometry(0.19, 0.25, 0.62, 8), clothes, group, [0, 0.82, 0]);
+      addMesh(new THREE.SphereGeometry(0.24, 12, 10), mats.villagerSkin, group, [0, 1.35, 0]);
+      addMesh(new THREE.SphereGeometry(0.25, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.53), mats.villagerHair, group, [0, 1.43, -0.015]);
+      [-1, 1].forEach((side) => {
+        addMesh(new THREE.SphereGeometry(0.025, 6, 6), mats.eye, group, [side * 0.085, 1.37, 0.222]);
+        addMesh(new THREE.CylinderGeometry(0.065, 0.075, 0.43, 7), mats.villagerSkin, group, [side * 0.28, 0.84, 0]);
+        addMesh(new THREE.CylinderGeometry(0.085, 0.095, 0.48, 7), mats.villagerClothesAlt, group, [side * 0.12, 0.29, 0]);
+        addBox(group, mats.shoes, [side * 0.12, 0.055, 0.035], [0.18, 0.1, 0.27]);
+      });
+      addMesh(new THREE.TorusGeometry(0.075, 0.012, 5, 12), mats.pink, group, [0, 1.31, 0.232]);
+      inhabitants.push({ group, homeY: group.position.y, phase, isAnimal: false });
+    };
+    const addAnimal = (x: number, z: number, fur: THREE.Material, phase: number, size = 1) => {
+      const group = new THREE.Group();
+      group.position.set(x, 1.66, z);
+      group.scale.setScalar(size);
+      scene.add(group);
+      addMesh(new THREE.SphereGeometry(0.38, 12, 9), fur, group, [0, 0.42, 0], [1.35, 0.9, 0.85]);
+      addMesh(new THREE.SphereGeometry(0.27, 12, 10), fur, group, [0, 0.55, 0.36]);
+      [-1, 1].forEach((side) => {
+        addMesh(new THREE.ConeGeometry(0.09, 0.25, 7), fur, group, [side * 0.16, 0.82, 0.35]);
+        addMesh(new THREE.SphereGeometry(0.035, 6, 6), mats.eye, group, [side * 0.1, 0.59, 0.59]);
+        [-0.23, 0.23].forEach((legX) => {
+          addMesh(new THREE.CylinderGeometry(0.07, 0.055, 0.3, 7), fur, group, [legX, 0.17, side * 0.18]);
+        });
+      });
+      const tail = addMesh(new THREE.ConeGeometry(0.12, 0.38, 7), fur, group, [0, 0.55, -0.42]);
+      tail.rotation.x = -Math.PI / 2;
+      addMesh(new THREE.SphereGeometry(0.095, 8, 6), mats.villagerSkin, group, [0, 0.43, 0.58]);
+      inhabitants.push({ group, homeY: group.position.y, phase, isAnimal: true });
+    };
+    addVillager(-12, 9, mats.villagerClothes, 0);
+    addVillager(14, -17, mats.villagerClothesAlt, 1.2);
+    addAnimal(-9, -17, mats.animalFur, 0.6, 1);
+    addAnimal(20, 10, mats.animalFurAlt, 1.8, 0.9);
+    addAnimal(-25, 2, island.id === "candy" ? mats.pink : mats.animalFur, 2.7, 0.78);
 
     const avatar = new THREE.Group();
     scene.add(avatar);
@@ -4470,20 +4555,36 @@ const NumatikWorldPage = () => {
     });
     let dustCursor = 0;
 
-    const treasurePositions: Array<[number, number]> = [
-      [2, 45], [-18, 28], [20, 30], [-34, 3], [36, -7],
-    ];
-    const treasures: Treasure[] = treasurePositions.map(([x, z], index) => {
+    const treasures: Treasure[] = TREASURE_POSITIONS.map(([x, z], index) => {
       const group = new THREE.Group();
-      group.position.set(x, 0.08, z);
+      group.position.set(x, 1.74, z);
       scene.add(group);
-      addBox(group, mats.chestWood, [0, 0.38, 0], [1.1, 0.55, 0.76]);
-      addBox(group, mats.chestWood, [0, 0.7, 0], [1.16, 0.18, 0.82]);
-      addBox(group, mats.yellow, [0, 0.39, 0.39], [1.12, 0.1, 0.06]);
-      addBox(group, mats.yellow, [0, 0.7, 0.42], [0.2, 0.24, 0.08]);
-      const halo = addMesh(new THREE.TorusGeometry(0.95, 0.055, 8, 24), mats.yellow, group, [0, 0.08, 0]);
-      halo.rotation.x = Math.PI / 2;
-      return { group, home: group.position.clone(), phase: index * 0.8, collected: false };
+      addBox(group, mats.chestWood, [0, 0.4, 0], [1.55, 0.72, 1.08]);
+      addBox(group, mats.chestGold, [0, 0.75, 0.555], [0.25, 0.27, 0.08]);
+      addBox(group, mats.chestWood, [0, 0.73, 0.6], [0.12, 0.07, 0.02]);
+      [-0.56, 0.56].forEach((bandX) => {
+        addBox(group, mats.chestGold, [bandX, 0.4, 0.55], [0.1, 0.7, 0.045]);
+      });
+
+      const coinGeometry = new THREE.CylinderGeometry(0.25, 0.25, 0.1, 20);
+      [-0.38, 0, 0.38].forEach((coinX, coinIndex) => {
+        const coin = addMesh(coinGeometry, mats.treasureCoin, group, [coinX, 0.82, -0.12]);
+        coin.rotation.z = coinIndex === 1 ? -0.14 : 0.12;
+        addMesh(new THREE.TorusGeometry(0.19, 0.022, 6, 20), mats.chestGold, group, [coinX, 0.88, -0.12]);
+      });
+      const coinStack = addMesh(coinGeometry, mats.treasureCoin, group, [0.43, 0.93, -0.32]);
+      coinStack.rotation.z = -0.18;
+
+      const glow = new THREE.Group();
+      group.add(glow);
+      const innerGlow = addMesh(treasureGlowGeometry, treasureGlowMaterial, glow, [0, -0.035, 0]);
+      innerGlow.rotation.x = Math.PI / 2;
+      const outerGlow = addMesh(treasureOuterGlowGeometry, treasureGlowMaterial, glow, [0, -0.02, 0]);
+      outerGlow.rotation.x = Math.PI / 2;
+      const beaconLight = new THREE.PointLight("#ffe66d", 0.8, 5, 2);
+      beaconLight.position.set(0, 0.9, 0);
+      group.add(beaconLight);
+      return { id: index, group, glow, beaconLight, home: group.position.clone(), phase: index * 0.8, collected: false };
     });
 
     const playerPosition = new THREE.Vector3(0, 1.68, 43);
@@ -4523,7 +4624,7 @@ const NumatikWorldPage = () => {
     let scoreNow = 0;
     let lastFrameTime = performance.now();
     let frameId = 0;
-    const maxIslandRadius = 62;
+    const maxIslandRadius = WORLD_RADIUS;
 
     const updateSize = () => {
       const width = Math.max(host.clientWidth, 1);
@@ -4651,6 +4752,12 @@ const NumatikWorldPage = () => {
               : 0;
         avatar.rotation.y = facingYaw;
         jumpRequestedRef.current = false;
+      }
+      const radarPlayer = radarPlayerRef.current;
+      if (radarPlayer) {
+        const radarPosition = toRadarCoordinates(playerPosition.x, playerPosition.z);
+        radarPlayer.setAttribute("cx", String(radarPosition.x));
+        radarPlayer.setAttribute("cy", String(radarPosition.y));
       }
 
       if (!wasGrounded && grounded) animationState.landingBend = 1;
@@ -5373,6 +5480,13 @@ const NumatikWorldPage = () => {
         if (treasure.collected) return;
         treasure.group.rotation.y = Math.sin(now * 0.0004 + treasure.phase) * 0.12;
         treasure.group.position.y = treasure.home.y + Math.sin(now * 0.002 + treasure.phase) * 0.08;
+        const glowPulse = 1 + Math.sin(now * 0.003 + treasure.phase) * 0.08;
+        treasure.glow.scale.setScalar(glowPulse);
+        treasure.beaconLight.intensity = 0.6 + Math.sin(now * 0.003 + treasure.phase) * 0.2;
+      });
+      inhabitants.forEach(({ group, homeY, phase, isAnimal }) => {
+        group.position.y = homeY + Math.sin(now * 0.0018 + phase) * (isAnimal ? 0.045 : 0.025);
+        group.rotation.y = Math.sin(now * 0.0007 + phase) * 0.18;
       });
       if (DEBUG_PANEL && (selectedAvatarId === "chibi-halus" || selectedAvatarId === "chibi-kucing")) {
         const bones = selectedAvatarId === "chibi-kucing" ? kucingBones : chibiBones;
@@ -5477,7 +5591,9 @@ const NumatikWorldPage = () => {
       setAnswerFeedback("Belum tepat. Coba hitung sekali lagi!");
       return;
     }
+    const collectedTreasureId = pendingTreasureRef.current.id;
     pendingTreasureRef.current = null;
+    setCollectedTreasureIds((ids) => [...ids, collectedTreasureId]);
     const nextTreasuresFound = treasuresFound + 1;
     setTreasuresFound(nextTreasuresFound);
     setScore((value) => value + 10);
@@ -5497,6 +5613,7 @@ const NumatikWorldPage = () => {
     gameCompleteRef.current = false;
     setGameComplete(false);
     setTreasuresFound(0);
+    setCollectedTreasureIds([]);
     setScore(0);
     setQuestion(null);
     setGameStarted(false);
@@ -5587,6 +5704,17 @@ const NumatikWorldPage = () => {
         .world-back,.world-score{display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:9px 14px;border:1px solid rgba(255,255,255,.92);border-radius:16px;background:rgba(255,255,255,.88);color:#315d87;font:800 11px var(--font-display,'Orbitron'),sans-serif;box-shadow:0 6px 20px rgba(34,99,137,.16);backdrop-filter:blur(8px)}
         .world-back{pointer-events:auto;cursor:pointer}
         .world-score{font-size:13px;color:#3672cb}
+        .world-radar{position:absolute;z-index:2;top:82px;right:clamp(14px,3vw,34px);display:grid;justify-items:center;gap:4px;width:152px;padding:9px 10px 8px;border:1px solid rgba(255,255,255,.92);border-radius:18px;background:rgba(22,57,79,.78);box-shadow:0 6px 20px rgba(20,54,78,.2);backdrop-filter:blur(8px);color:#fff}
+        .world-radar-title{font:800 10px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.1em}
+        .world-radar-map{display:block;width:126px;height:126px;overflow:visible}
+        .world-radar-grid{fill:none;stroke:rgba(207,239,255,.35);stroke-width:1}
+        .world-radar-treasure{fill:#ffe56c;stroke:#fff8cc;stroke-width:1.5;filter:drop-shadow(0 0 3px #ffd53d);animation:world-radar-pulse 1.5s ease-in-out infinite}
+        .world-radar-player{fill:#66e8ff;stroke:#fff;stroke-width:2;filter:drop-shadow(0 0 4px #48dfff)}
+        .world-radar-legend{display:flex;justify-content:center;gap:9px;color:#e5f6ff;font-size:9px;font-weight:700;white-space:nowrap}
+        .world-radar-legend span{display:inline-flex;align-items:center;gap:4px}
+        .world-radar-legend i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#ffe56c}
+        .world-radar-legend .world-radar-player-key{background:#66e8ff}
+        @keyframes world-radar-pulse{50%{opacity:.55;filter:drop-shadow(0 0 7px #ffd53d)}}
         .world-title{font:900 clamp(16px,2.4vw,25px)/1 var(--font-display,'Orbitron'),sans-serif;letter-spacing:.04em;text-shadow:0 2px 0 #3478c8,0 5px 12px rgba(22,80,138,.3)}
         .world-subtitle{margin-top:5px;font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 5px rgba(20,83,133,.4)}
         .world-brand-mark{display:grid;place-items:center;width:42px;height:42px;overflow:hidden;border:2px solid #fff;border-radius:14px;background:#fff;box-shadow:0 5px 16px rgba(34,99,137,.18)}
@@ -5722,10 +5850,10 @@ const NumatikWorldPage = () => {
         .world-start-button:hover{transform:translateY(-2px);filter:brightness(1.05)}
         .world-start-button:active{transform:translateY(3px);box-shadow:0 3px 0 #168d7d}
         .world-start-button:focus-visible,.world-island-card:focus-visible,.world-start-back:focus-visible,.world-avatar-card:focus-visible{outline:3px solid #ffbc58;outline-offset:3px}
-        @media(max-width:600px){.world-top{align-items:flex-start}.world-brand{gap:7px}.world-title{font-size:clamp(11px,3.2vw,17px)}.world-subtitle{display:none}.world-brand-mark{width:34px;height:34px}.world-back{min-height:36px;padding:7px 9px;font-size:9px}.world-score{min-height:36px;padding:7px 10px;font-size:11px}.world-bottom{bottom:102px;max-width:calc(100vw - 26px);font-size:10px}.world-mobile-controls{grid-template-columns:repeat(3,42px);grid-template-rows:repeat(2,42px);gap:4px;left:12px;bottom:14px}.world-jump{right:14px;bottom:20px;width:58px;height:58px}}
+        @media(max-width:600px){.world-top{align-items:flex-start}.world-brand{gap:7px}.world-title{font-size:clamp(11px,3.2vw,17px)}.world-subtitle{display:none}.world-brand-mark{width:34px;height:34px}.world-back{min-height:36px;padding:7px 9px;font-size:9px}.world-score{min-height:36px;padding:7px 10px;font-size:11px}.world-radar{top:68px;right:10px;width:122px;padding:7px 6px}.world-radar-map{width:104px;height:104px}.world-bottom{bottom:102px;max-width:calc(100vw - 26px);font-size:10px}.world-mobile-controls{grid-template-columns:repeat(3,42px);grid-template-rows:repeat(2,42px);gap:4px;left:12px;bottom:14px}.world-jump{right:14px;bottom:20px;width:58px;height:58px}}
         @media(max-width:760px){.world-start-screen{place-items:start center;padding:14px}.world-start-content{margin:auto}.world-start-top{margin-bottom:13px}.world-start-heading{margin-bottom:16px}.world-start-mark{width:47px;height:47px;margin-bottom:9px;border-radius:16px}.world-lobby{grid-template-columns:1fr;gap:11px}.world-lobby-panel{padding:15px;border-radius:20px}.world-lobby-panel h2{font-size:13px}.world-lobby-intro{margin-bottom:12px;font-size:11px}.world-rules{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px;padding:10px}.world-rule{font-size:10px}.world-start-button{min-height:48px;margin-top:12px}.world-avatar-grid{grid-auto-flow:column;grid-auto-columns:minmax(250px,82vw);grid-template-columns:none;overflow-x:auto;padding:5px 4px 12px;scroll-snap-type:x mandatory;touch-action:pan-x}.world-avatar-card{scroll-snap-align:center;height:100%}.world-avatar-preview{height:142px}.world-avatar-pick{flex:none}}
         @media(max-width:390px){.world-island-grid{gap:7px}.world-island-card{grid-template-columns:34px minmax(0,1fr);gap:7px;min-height:66px;padding:8px}.world-island-emoji{width:34px;height:34px;font-size:21px}.world-island-name{font-size:9px}.world-island-description{font-size:9px}.world-start-badge{font-size:9px;padding:7px 9px}}
-        @media(prefers-reduced-motion:reduce){.world-answer:hover{transform:none}}
+        @media(prefers-reduced-motion:reduce){.world-answer:hover{transform:none}.world-radar-treasure{animation:none}}
       `}</style>
       <div ref={hostRef} className="absolute inset-0">
         {gameStarted && avatarLoading && (
@@ -5844,6 +5972,25 @@ const NumatikWorldPage = () => {
               </div>
               <div className="world-score" aria-live="polite">🧰 HARTA {treasuresFound}/{TREASURE_COUNT} · {score} POIN</div>
             </header>
+            <aside className="world-radar" aria-label="Radar lokasi harta karun">
+              <span className="world-radar-title">RADAR HARTA</span>
+              <svg className="world-radar-map" viewBox="0 0 120 120" role="img" aria-label={`Peta lokasi pemain dan ${TREASURE_COUNT - treasuresFound} harta karun tersisa`}>
+                <circle className="world-radar-grid" cx="60" cy="60" r="48" />
+                <circle className="world-radar-grid" cx="60" cy="60" r="32" />
+                <circle className="world-radar-grid" cx="60" cy="60" r="16" />
+                <path className="world-radar-grid" d="M12 60h96M60 12v96" />
+                {TREASURE_POSITIONS.map(([x, z], index) => {
+                  if (collectedTreasureIds.includes(index)) return null;
+                  const position = toRadarCoordinates(x, z);
+                  return <circle key={index} className="world-radar-treasure" cx={position.x} cy={position.y} r="3.3" aria-label={`Harta ${index + 1}`} />;
+                })}
+                <circle ref={radarPlayerRef} className="world-radar-player" cx={toRadarCoordinates(0, 43).x} cy={toRadarCoordinates(0, 43).y} r="4" />
+              </svg>
+              <div className="world-radar-legend" aria-hidden="true">
+                <span><i /> Harta</span>
+                <span><i className="world-radar-player-key" /> Kamu</span>
+              </div>
+            </aside>
             <div className="world-bottom">
               Jelajahi pulau &nbsp; <kbd>W A S D</kbd> bergerak &nbsp; <kbd>SPACE</kbd> lompat &nbsp; seret layar untuk melihat
             </div>

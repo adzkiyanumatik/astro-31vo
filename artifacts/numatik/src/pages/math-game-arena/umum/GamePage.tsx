@@ -9,7 +9,7 @@ type MoveInput = { x: number; y: number };
 type QualitySetting = "low" | "medium" | "high";
 type BrightnessSetting = "normal" | "bright" | "very-bright";
 type WeaponId = "rifle" | "pistol";
-type GamePhase = "combat" | "supply" | "paused" | "gameover" | "complete";
+type GamePhase = "combat" | "supply" | "treasure" | "paused" | "gameover" | "complete";
 type SupplyQuestion = { prompt: string; answer: number; options: number[] };
 type SoundCue = "rifle" | "pistol" | "hit" | "headshot" | "enemy" | "wave" | "correct" | "wrong" | "gameover" | "reload" | "empty" | "step";
 type EnemyVoiceKind = "scream" | "death" | "hurt";
@@ -80,6 +80,11 @@ type SoldierState = {
   phase: number;
   voicePitch: number;
 };
+type TreasureChest = {
+  group: THREE.Group;
+  collected: boolean;
+  phase: number;
+};
 type HitFeedback = { id: number; damage: number; headshot: boolean; eliminated: boolean };
 type EnemyScreamVariant = { pitch: number; duration: number; formants: [number, number, number] };
 
@@ -116,6 +121,7 @@ const WEAPON_CONFIG: Record<WeaponId, {
   },
 };
 const STARTING_ENEMIES = 10;
+const TREASURE_COUNT = 5;
 const GUNFIRE_ALERT_RADIUS = 36;
 const BEST_SCORE_KEY = "numatik-strike-best-score";
 const TOUCH_LOOK_SENSITIVITY_KEY = "numatik-strike-touch-look-sensitivity";
@@ -252,6 +258,8 @@ const GamePage = () => {
   const scoreRef = useRef(0);
   const [bestScore, setBestScore] = useState(0);
   const [enemyCount, setEnemyCount] = useState(0);
+  const [treasuresFound, setTreasuresFound] = useState(0);
+  const treasuresFoundRef = useRef(0);
   const [wave, setWave] = useState(1);
   const waveRef = useRef(1);
   const [playerHealth, setPlayerHealth] = useState(100);
@@ -264,6 +272,8 @@ const GamePage = () => {
   const supplyQuestionRef = useRef<SupplyQuestion | null>(null);
   const [supplyMessage, setSupplyMessage] = useState<string | null>(null);
   const supplyResolvedRef = useRef(false);
+  const activeTreasureRef = useRef<TreasureChest | null>(null);
+  const [treasureAnswerCorrect, setTreasureAnswerCorrect] = useState<boolean | null>(null);
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
   const muteWarningLoggedRef = useRef(false);
@@ -301,6 +311,7 @@ const GamePage = () => {
   const [isReloading, setIsReloading] = useState(false);
   const [crosshairGap, setCrosshairGap] = useState(4);
   const [radarContacts, setRadarContacts] = useState<RadarContact[]>([]);
+  const [radarTreasureContacts, setRadarTreasureContacts] = useState<RadarContact[]>([]);
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [damageFlashId, setDamageFlashId] = useState(0);
   const [incomingDirection, setIncomingDirection] = useState<DamageDirection | null>(null);
@@ -616,9 +627,19 @@ const GamePage = () => {
     materials.push(windowMat);
     const puddleMat = material("#ffffff", 0.34, 0.28);
     const groundDetailMat = material("#ffffff", 0.98, 0.01);
+    const treasureWoodMat = material("#ffffff", 0.78, 0.08);
+    const treasureGoldMat = material("#e8b83f", 0.24, 0.78);
+    const treasureCoinMat = material("#ffd84c", 0.22, 0.82);
+    const treasureGlowMat = new THREE.MeshBasicMaterial({
+      color: "#ffc94d",
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      toneMapped: false,
+    });
     const glowMat = new THREE.MeshBasicMaterial({ color: "#ffd18b", toneMapped: false });
     const darkInsetMat = material("#343a3b", 0.8, 0.14);
-    materials.push(glowMat);
+    materials.push(glowMat, treasureGlowMat);
     const searchlightBeamMat = new THREE.MeshBasicMaterial({
       color: "#f7d49d",
       transparent: true,
@@ -643,6 +664,8 @@ const GamePage = () => {
     vehicleMat.map = createSurfaceTexture("#909384", "metal");
     puddleMat.map = createSurfaceTexture("#758285", "earth");
     groundDetailMat.map = floorMat.map;
+    treasureWoodMat.map = createSurfaceTexture("#79502f", "wood");
+    treasureGoldMat.map = createSurfaceTexture("#d5aa45", "metal");
     floorMat.map.repeat.set(12, 12);
     roadMat.map.repeat.set(12, 12);
     openZoneMat.map.repeat.set(8, 8);
@@ -1681,6 +1704,68 @@ const GamePage = () => {
       throw new Error(`Jumlah instance dekorasi tidak sesuai batas kualitas: ${JSON.stringify(actualQualityCounts)}`);
     }
 
+    const treasureChests: TreasureChest[] = [];
+    const treasureChestTargets: THREE.Object3D[] = [];
+    const treasureBoxGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const treasureCoinGeometry = new THREE.CylinderGeometry(0.24, 0.24, 0.09, 20);
+    const treasureRimGeometry = new THREE.TorusGeometry(0.19, 0.025, 6, 20);
+    const treasureGlowRingGeometry = new THREE.TorusGeometry(1.55, 0.07, 8, 40);
+    const treasureOuterGlowGeometry = new THREE.TorusGeometry(1.9, 0.035, 8, 40);
+    const addChestPart = (
+      group: THREE.Group,
+      geometry: THREE.BufferGeometry,
+      mat: THREE.Material,
+      position: [number, number, number],
+      scale: [number, number, number],
+      targetable = true,
+    ) => {
+      const mesh = new THREE.Mesh(geometry, mat);
+      mesh.position.set(...position);
+      mesh.scale.set(...scale);
+      mesh.castShadow = true;
+      mesh.userData.strikeShadowEligible = true;
+      group.add(mesh);
+      if (targetable) treasureChestTargets.push(mesh);
+      return mesh;
+    };
+    for (let index = 0; index < TREASURE_COUNT; index += 1) {
+      const position = findDecorationPosition(3, 2.4);
+      const group = new THREE.Group();
+      group.position.set(position.x, 0, position.z);
+      scene.add(group);
+      addChestPart(group, treasureBoxGeometry, treasureWoodMat, [0, 0.52, 0], [1.9, 0.95, 1.45]);
+      addChestPart(group, treasureBoxGeometry, treasureWoodMat, [0, 1.12, -0.02], [2, 0.28, 1.52]);
+      [-0.62, 0.62].forEach((bandX) => {
+        addChestPart(group, treasureBoxGeometry, treasureGoldMat, [bandX, 0.55, 0.735], [0.13, 0.94, 0.045]);
+      });
+      addChestPart(group, treasureBoxGeometry, treasureGoldMat, [0, 0.99, 0.79], [0.36, 0.42, 0.09]);
+      addChestPart(group, treasureBoxGeometry, treasureWoodMat, [0, 0.97, 0.845], [0.16, 0.1, 0.025], false);
+      [-0.48, 0, 0.48].forEach((coinX, coinIndex) => {
+        const height = 1.34 + (coinIndex === 1 ? 0.06 : 0);
+        const coin = addChestPart(group, treasureCoinGeometry, treasureCoinMat, [coinX, height, -0.18], [1, 1, 1], false);
+        coin.rotation.z = coinIndex === 1 ? -0.18 : 0.12;
+        const rim = addChestPart(group, treasureRimGeometry, treasureGoldMat, [coinX, height + 0.05, -0.18], [1, 1, 1], false);
+        rim.rotation.x = Math.PI / 2;
+      });
+      const innerGlow = addChestPart(group, treasureGlowRingGeometry, treasureGlowMat, [0, 0.035, 0], [1, 1, 1], false);
+      innerGlow.rotation.x = Math.PI / 2;
+      const outerGlow = addChestPart(group, treasureOuterGlowGeometry, treasureGlowMat, [0, 0.025, 0], [1, 1, 1], false);
+      outerGlow.rotation.x = Math.PI / 2;
+      const beacon = new THREE.PointLight("#ffc94d", 3.2, 13, 2);
+      beacon.position.set(0, 1.6, 0);
+      group.add(beacon);
+      const shadow = new THREE.Mesh(contactShadowGeometry, contactShadowMaterial);
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.position.set(0, -0.035, 0);
+      shadow.scale.set(3.2, 2.7, 1);
+      group.add(shadow);
+      solidObstacles.push({ x: position.x, z: position.z, width: 2.05, depth: 1.6 });
+      group.children.forEach((child) => {
+        if (treasureChestTargets.includes(child)) worldOccluders.push(child);
+      });
+      treasureChests.push({ group, collected: false, phase: index * 0.9 });
+    }
+
     const soldierGeometries = new Set<THREE.BufferGeometry>();
     const soldierGeometry = <T extends THREE.BufferGeometry>(geometry: T) => {
       soldierGeometries.add(geometry);
@@ -1710,6 +1795,13 @@ const GamePage = () => {
       new THREE.Vector3(0.065, -0.36, 0.14),
     ]);
     const soldierMagazineGeometry = soldierGeometry(new THREE.TubeGeometry(soldierMagazineCurve, 9, 0.055, 6, false));
+    const soldierSlingCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-0.09, -0.06, -0.42),
+      new THREE.Vector3(-0.24, -0.24, -0.2),
+      new THREE.Vector3(-0.22, -0.28, 0.18),
+      new THREE.Vector3(-0.08, -0.09, 0.48),
+    ]);
+    const soldierSlingGeometry = soldierGeometry(new THREE.TubeGeometry(soldierSlingCurve, 16, 0.025, 6, false));
     const muzzleFlashGeometry = soldierGeometry(new THREE.SphereGeometry(0.5, 12, 8));
     const soldierPart = (
       geometry: THREE.BufferGeometry,
@@ -1774,6 +1866,11 @@ const GamePage = () => {
       soldierPart(soldierBoxGeometry, 1, [0.24, 1.35, 0.27], [0.13, 0.18, 0.11]),
       soldierPart(soldierBoxGeometry, 2, [0.28, 1.43, -0.34], [0.16, 0.3, 0.12]),
       soldierPart(soldierCylinderGeometry, 1, [0.28, 1.43, -0.42], [0.09, 0.28, 0.09], [0, 0, Math.PI / 2]),
+      soldierPart(soldierBoxGeometry, 2, [-0.19, 1.53, 0.39], [0.075, 0.48, 0.045], [0, 0, -0.36]),
+      soldierPart(soldierBoxGeometry, 2, [0.19, 1.53, 0.39], [0.075, 0.48, 0.045], [0, 0, 0.36]),
+      soldierPart(soldierBoxGeometry, 1, [0, 1.49, 0.435], [0.12, 0.14, 0.035]),
+      soldierPart(soldierBoxGeometry, 2, [-0.37, 1.52, -0.22], [0.16, 0.3, 0.17]),
+      soldierPart(soldierCylinderGeometry, 1, [-0.39, 1.78, -0.23], [0.018, 0.28, 0.018]),
     ]);
     const headGeometry = mergeSoldierParts([
       soldierPart(soldierCylinderGeometry, 0, [0, 1.72, 0], [0.14, 0.2, 0.14]),
@@ -1831,6 +1928,7 @@ const GamePage = () => {
       soldierPart(soldierCylinderGeometry, 1, [0, 0.19, -0.04], [0.06, 0.2, 0.06]),
       soldierPart(soldierTorusGeometry, 1, [0, 0.19, -0.04], [0.075, 0.075, 0.075], [Math.PI / 2, 0, 0]),
       soldierPart(soldierBoxGeometry, 0, [-0.11, -0.13, 0.32], [0.08, 0.16, 0.18]),
+      soldierPart(soldierSlingGeometry, 0, [0, 0, 0], [1, 1, 1]),
     ]);
 
     const spawnsAreValid = soldierSpawns.length === STARTING_ENEMIES
@@ -1938,6 +2036,16 @@ const GamePage = () => {
       else if (!active && existingIndex >= 0) combatTargets.splice(existingIndex, 1);
     };
     setEnemyCount(STARTING_ENEMIES);
+    treasuresFoundRef.current = 0;
+    setTreasuresFound(0);
+    activeTreasureRef.current = null;
+    treasureChests.forEach((chest) => {
+      chest.collected = false;
+      chest.group.visible = true;
+    });
+    treasureChestTargets.forEach((target) => {
+      if (!worldOccluders.includes(target)) worldOccluders.push(target);
+    });
     setWave(1);
     waveRef.current = 1;
 
@@ -3461,10 +3569,53 @@ const GamePage = () => {
       supplyResolvedRef.current = false;
       playSound("wave");
     };
+    const openTreasureQuestion = (chest: TreasureChest) => {
+      if (gamePhaseRef.current !== "combat" || chest.collected) return;
+      document.exitPointerLock?.();
+      firingRef.current = false;
+      sprintingRef.current = false;
+      aimingRef.current = false;
+      setSprinting(false);
+      setAiming(false);
+      setMobileSprintHeld(false);
+      activeTreasureRef.current = chest;
+      setPhase("treasure");
+      setTreasureAnswerCorrect(null);
+      const question = createSupplyQuestion(Math.min(treasuresFoundRef.current + 1, TREASURE_COUNT));
+      supplyQuestionRef.current = question;
+      setSupplyQuestion(question);
+      setSupplyMessage(null);
+      supplyResolvedRef.current = false;
+      playSound("wave");
+    };
     answerSupplyRef.current = (selectedAnswer: number) => {
       const question = supplyQuestionRef.current;
-      if (gamePhaseRef.current !== "supply" || supplyResolvedRef.current || !question) return;
+      if ((gamePhaseRef.current !== "supply" && gamePhaseRef.current !== "treasure") || supplyResolvedRef.current || !question) return;
       supplyResolvedRef.current = true;
+      if (gamePhaseRef.current === "treasure") {
+        const chest = activeTreasureRef.current;
+        if (!chest) return;
+        if (selectedAnswer === question.answer) {
+          chest.collected = true;
+          chest.group.visible = false;
+          activeTreasureRef.current = null;
+          const chestTargets = new Set(chest.group.children);
+          for (let index = worldOccluders.length - 1; index >= 0; index -= 1) {
+            if (chestTargets.has(worldOccluders[index]!)) worldOccluders.splice(index, 1);
+          }
+          treasuresFoundRef.current += 1;
+          setTreasuresFound(treasuresFoundRef.current);
+          addScore(200);
+          setSupplyMessage(`Benar! Peti ditemukan. ${TREASURE_COUNT - treasuresFoundRef.current} peti lagi.`);
+          setTreasureAnswerCorrect(true);
+          playSound("correct");
+        } else {
+          setSupplyMessage("Jawaban belum tepat. Coba lagi untuk membuka peti.");
+          setTreasureAnswerCorrect(false);
+          playSound("wrong");
+        }
+        return;
+      }
       if (selectedAnswer === question.answer) {
         const reward = Math.floor(Math.random() * 3);
         if (reward === 0) {
@@ -3489,6 +3640,29 @@ const GamePage = () => {
         playSound("wrong");
       }
     };
+    nextWaveRef.current = () => {
+      if (gamePhaseRef.current !== "treasure" || !supplyResolvedRef.current) return;
+      if (activeTreasureRef.current) {
+        const question = createSupplyQuestion(Math.min(treasuresFoundRef.current + 1, TREASURE_COUNT));
+        supplyQuestionRef.current = question;
+        setSupplyQuestion(question);
+        setSupplyMessage(null);
+        setTreasureAnswerCorrect(null);
+        supplyResolvedRef.current = false;
+        return;
+      }
+      supplyQuestionRef.current = null;
+      setSupplyQuestion(null);
+      setSupplyMessage(null);
+      setTreasureAnswerCorrect(null);
+      supplyResolvedRef.current = false;
+      activeTreasureRef.current = null;
+      if (treasuresFoundRef.current >= TREASURE_COUNT && soldiers.every((soldier) => !soldier.alive)) {
+        finishGame(true);
+      } else {
+        setPhase("combat");
+      }
+    };
     let aimBlend = 0;
     const weaponPose = {
       rifle: {
@@ -3509,6 +3683,16 @@ const GamePage = () => {
       scoreRef.current = 0;
       setScore(0);
       setEnemyCount(STARTING_ENEMIES);
+      treasuresFoundRef.current = 0;
+      setTreasuresFound(0);
+      activeTreasureRef.current = null;
+      treasureChests.forEach((chest) => {
+        chest.collected = false;
+        chest.group.visible = true;
+      });
+      treasureChestTargets.forEach((target) => {
+        if (!worldOccluders.includes(target)) worldOccluders.push(target);
+      });
       playerHealthRef.current = 100;
       setPlayerHealth(100);
       playerArmorRef.current = 0;
@@ -3550,7 +3734,9 @@ const GamePage = () => {
       setIncomingDirection(null);
       setKillFeed([]);
       setRadarContacts([]);
+      setRadarTreasureContacts([]);
       supplyResolvedRef.current = false;
+      setTreasureAnswerCorrect(null);
       supplyQuestionRef.current = null;
       setSupplyQuestion(null);
       setSupplyMessage(null);
@@ -3647,6 +3833,14 @@ const GamePage = () => {
           mesh.count = counts[activeDecorationQuality];
         });
       }
+      treasureChests.forEach((chest) => {
+        if (chest.collected) return;
+        const pulse = 1 + Math.sin(now * 0.003 + chest.phase) * 0.08;
+        chest.group.children.forEach((child) => {
+          if (child instanceof THREE.PointLight) child.intensity = 2.6 + Math.sin(now * 0.003 + chest.phase) * 0.6;
+          if (child instanceof THREE.Mesh && child.material === treasureGlowMat) child.scale.setScalar(pulse);
+        });
+      });
       if (gamePhaseRef.current !== "combat") {
         renderer.render(scene, camera);
         return;
@@ -3767,7 +3961,7 @@ const GamePage = () => {
         renderer.render(scene, camera);
         return;
       }
-      if (soldiers.every((soldier) => !soldier.alive)) {
+      if (soldiers.every((soldier) => !soldier.alive) && treasuresFoundRef.current >= TREASURE_COUNT) {
         finishGame(true);
         renderer.render(scene, camera);
         return;
@@ -3865,6 +4059,11 @@ const GamePage = () => {
           playerGrounded = true;
         }
       }
+      const nearbyChest = treasureChests.find((chest) => (
+        !chest.collected
+        && Math.hypot(chest.group.position.x - player.position.x, chest.group.position.z - player.position.z) < 3.1
+      ));
+      if (nearbyChest) openTreasureQuestion(nearbyChest);
       if (length > 0.1 && playerGrounded && now - lastFootstepAt >= (sprintActive ? 330 : 440)) {
         lastFootstepAt = now;
         playSound("step");
@@ -3955,7 +4154,22 @@ const GamePage = () => {
           }
           return { id: index, x: 50 + offsetX, y: 50 + offsetY };
         });
+        const treasureContacts = treasureChests.filter((chest) => !chest.collected).map((chest, index) => {
+          const dx = chest.group.position.x - player.position.x;
+          const dz = chest.group.position.z - player.position.z;
+          const rightDistance = dx * rightX + dz * rightZ;
+          const forwardDistance = dx * forwardX + dz * forwardZ;
+          let offsetX = (rightDistance / radarRange) * 42;
+          let offsetY = (-forwardDistance / radarRange) * 42;
+          const offsetLength = Math.hypot(offsetX, offsetY);
+          if (offsetLength > 42) {
+            offsetX = (offsetX / offsetLength) * 42;
+            offsetY = (offsetY / offsetLength) * 42;
+          }
+          return { id: index, x: 50 + offsetX, y: 50 + offsetY };
+        });
         setRadarContacts(contacts);
+        setRadarTreasureContacts(treasureContacts);
         lastHudUiAt = now;
       }
       renderer.render(scene, camera);
@@ -4382,6 +4596,8 @@ const GamePage = () => {
          @keyframes str-radar-sweep{to{transform:rotate(360deg)}}
          .strike-radar-player{fill:#d7dfab;stroke:#f3f5dd;stroke-width:1}
          .strike-radar-enemy{fill:#ff514c;stroke:#ffc3a5;stroke-width:.8;filter:drop-shadow(0 0 2px #ff4d48)}
+         .strike-radar-treasure{fill:#ffd75e;stroke:#fff1b7;stroke-width:.8;filter:drop-shadow(0 0 3px #ffbf3f);animation:str-radar-treasure-pulse 1.4s ease-in-out infinite}
+         @keyframes str-radar-treasure-pulse{50%{opacity:.52}}
          .strike-radar-label{position:absolute;left:50%;top:-1px;transform:translateX(-50%);font:600 7px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.08em;color:#c4c6a9;text-shadow:0 1px 4px #06131a}
           .strike-health-panel,.strike-ammo-panel{position:absolute;bottom:82px;min-height:60px;padding:9px 11px;border:1px solid rgba(180,176,145,.28);background:rgba(12,16,15,.82);box-shadow:0 8px 24px rgba(0,0,0,.3);pointer-events:none}
          .strike-health-panel{left:clamp(16px,4vw,48px);width:210px}
@@ -4521,11 +4737,11 @@ const GamePage = () => {
               </defs>
               <image href="/logo-numatik.png" x="0" y="0" width="1024" height="1024" preserveAspectRatio="xMidYMid meet" filter="url(#numatik-hud-ink)" />
             </svg>
-            <div><div className="strike-title">STRIKE</div><div className="strike-subtitle">Zona latihan · misi tunggal</div></div>
+            <div><div className="strike-title">STRIKE</div><div className="strike-subtitle">Misi 5 peti harta karun</div></div>
           </div>
           <div className="strike-header-actions">
             <div className="strike-status" role="status" aria-live="polite">
-              <i />Musuh tersisa: {enemyCount}/10 <span>·</span> Skor {String(score).padStart(3, "0")}
+              <i />MUSUH {enemyCount}/{STARTING_ENEMIES} <span>·</span> PETI {treasuresFound}/{TREASURE_COUNT} <span>·</span> SKOR {String(score).padStart(3, "0")}
             </div>
             <button
               className="strike-header-button"
@@ -4642,7 +4858,7 @@ const GamePage = () => {
             {mobile && renderTouchControlSettings("settings")}
           </section>
         </div>
-        <div className="strike-radar" aria-label="Radar musuh sekitar">
+        <div className="strike-radar" aria-label="Radar musuh dan peti harta karun">
           <span className="strike-radar-label">RADAR</span>
           <svg viewBox="0 0 100 100" aria-hidden="true">
             <circle className="strike-radar-sweep" cx="50" cy="50" r="40" />
@@ -4652,6 +4868,9 @@ const GamePage = () => {
             <path className="strike-radar-line" d="M50 6v88M6 50h88" />
             {radarContacts.map((contact) => (
               <circle key={contact.id} className="strike-radar-enemy" cx={contact.x} cy={contact.y} r="2.6" />
+            ))}
+            {radarTreasureContacts.map((contact) => (
+              <circle key={`treasure-${contact.id}`} className="strike-radar-treasure" cx={contact.x} cy={contact.y} r="3.2" />
             ))}
             <path className="strike-radar-player" d="M50 43 46 56 50 53 54 56Z" />
           </svg>
@@ -4782,12 +5001,20 @@ const GamePage = () => {
             aria-pressed={mobileSprintHeld}
           >LARI</button>
         </>}
-        {gamePhase === "supply" && supplyQuestion && (
+        {(gamePhase === "supply" || gamePhase === "treasure") && supplyQuestion && (
           <div className="strike-phase-layer">
             <section className="strike-phase-card" role="dialog" aria-modal="true" aria-labelledby="strike-supply-title">
-              <div className="strike-phase-kicker">Wave {wave} selesai · supply drop</div>
-              <h2 className="strike-phase-title" id="strike-supply-title">JAWAB UNTUK MEMBUKA SUPLAI</h2>
-              <p className="strike-phase-copy">Pilih jawaban yang benar. Hadiah benar berupa amunisi, HP penuh, atau armor.</p>
+              <div className="strike-phase-kicker">
+                {gamePhase === "treasure" ? `Misi peti harta karun · peti ${Math.min(treasuresFound + 1, TREASURE_COUNT)} dari ${TREASURE_COUNT}` : `Wave ${wave} selesai · supply drop`}
+              </div>
+              <h2 className="strike-phase-title" id="strike-supply-title">
+                {gamePhase === "treasure" ? "JAWAB UNTUK MEMBUKA PETI" : "JAWAB UNTUK MEMBUKA SUPLAI"}
+              </h2>
+              <p className="strike-phase-copy">
+                {gamePhase === "treasure"
+                  ? "Temukan semua 5 peti yang ditandai di radar. Jawab soal matematika untuk membuka setiap peti."
+                  : "Pilih jawaban yang benar. Hadiah benar berupa amunisi, HP penuh, atau armor."}
+              </p>
               <div className="strike-math-question" aria-label={`Soal: ${supplyQuestion.prompt}`}>{supplyQuestion.prompt}</div>
               <div className="strike-answer-grid">
                 {supplyQuestion.options.map((option) => (
@@ -4803,7 +5030,11 @@ const GamePage = () => {
               <div className="strike-supply-result" role="status" aria-live="polite">{supplyMessage}</div>
               {supplyMessage !== null && (
                 <button className="strike-phase-button" onClick={() => nextWaveRef.current?.()}>
-                  LANJUT KE WAVE {wave + 1}
+                  {gamePhase === "treasure"
+                    ? treasureAnswerCorrect
+                      ? treasuresFound >= TREASURE_COUNT && enemyCount === 0 ? "SELESAIKAN MISI" : "LANJUTKAN MISI"
+                      : "COBA LAGI"
+                    : `LANJUT KE WAVE ${wave + 1}`}
                 </button>
               )}
             </section>
@@ -4826,7 +5057,7 @@ const GamePage = () => {
           <div className="strike-phase-layer">
             <section className="strike-phase-card" role="dialog" aria-modal="true" aria-labelledby="strike-gameover-title">
               <div className="strike-phase-kicker">
-                {gamePhase === "complete" ? "Semua musuh berhasil dikalahkan" : "Operasi berakhir"}
+                {gamePhase === "complete" ? "Semua musuh dikalahkan dan 5 peti ditemukan" : "Operasi berakhir"}
               </div>
               <h2 className="strike-phase-title" id="strike-gameover-title">
                 {gamePhase === "complete" ? "Misi Selesai" : "GAME OVER"}
