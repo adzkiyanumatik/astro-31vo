@@ -1,6 +1,6 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Sparkles, Volume2, VolumeX } from "lucide-react";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { VertexNormalsHelper } from "three/addons/helpers/VertexNormalsHelper.js";
@@ -92,6 +92,8 @@ type IslandInhabitant = {
 };
 
 const TREASURE_COUNT = 5;
+const TREASURE_CORRECT_POINTS = 20;
+const TREASURE_WRONG_POINTS = 0;
 const WORLD_RADIUS = 62;
 const RADAR_CENTER = 60;
 const RADAR_RADIUS = 48;
@@ -807,8 +809,11 @@ const makeQuestion = (): WorldQuestion => {
 const NumatikWorldPage = () => {
   const navigate = useNavigate();
   const hostRef = useRef<HTMLDivElement>(null);
+  const worldMusicRef = useRef<HTMLAudioElement>(null);
   const radarPlayerRef = useRef<SVGCircleElement>(null);
   const keysRef = useRef(new Set<string>());
+  const movementStickRef = useRef({ x: 0, y: 0 });
+  const movementStickPointerRef = useRef<number | null>(null);
   const pendingTreasureRef = useRef<Treasure | null>(null);
   const gameCompleteRef = useRef(false);
   const jumpRequestedRef = useRef(false);
@@ -818,13 +823,19 @@ const NumatikWorldPage = () => {
   const [avatarBuildProgress, setAvatarBuildProgress] = useState(0);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(true);
   const [gameStarted, setGameStarted] = useState(false);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicError, setMusicError] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const [treasuresFound, setTreasuresFound] = useState(0);
   const [collectedTreasureIds, setCollectedTreasureIds] = useState<number[]>([]);
   const [gameComplete, setGameComplete] = useState(false);
   const [question, setQuestion] = useState<WorldQuestion | null>(null);
   const [answerFeedback, setAnswerFeedback] = useState<string | null>(null);
+  const [answerOutcome, setAnswerOutcome] = useState<"correct" | "wrong" | null>(null);
+  const [questionResolved, setQuestionResolved] = useState(false);
+  const [wrongAnswerCount, setWrongAnswerCount] = useState(0);
   const [mobile, setMobile] = useState(false);
+  const [movementStick, setMovementStick] = useState({ x: 0, y: 0 });
   const [debugOptions, setDebugOptions] = useState<DebugPanelOptions>(INITIAL_DEBUG_PANEL_OPTIONS);
   const debugOptionsRef = useRef(debugOptions);
   debugOptionsRef.current = debugOptions;
@@ -4641,7 +4652,12 @@ const NumatikWorldPage = () => {
       if (key === " " && !event.repeat) jumpRequestedRef.current = true;
     };
     const onKeyUp = (event: KeyboardEvent) => keysRef.current.delete(event.key.toLowerCase());
-    const onBlur = () => keysRef.current.clear();
+    const onBlur = () => {
+      keysRef.current.clear();
+      movementStickRef.current = { x: 0, y: 0 };
+      setMovementStick({ x: 0, y: 0 });
+      movementStickPointerRef.current = null;
+    };
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0 && event.button !== 2) return;
       pointerId = event.pointerId;
@@ -4696,9 +4712,22 @@ const NumatikWorldPage = () => {
       }
       const input = keysRef.current;
       const fixedFacing = DEBUG_PANEL ? debugOptionsRef.current.fixedFacing : null;
-      const forward = Number(input.has("w") || input.has("arrowup")) - Number(input.has("s") || input.has("arrowdown"));
-      const sideways = Number(input.has("d") || input.has("arrowright")) - Number(input.has("a") || input.has("arrowleft"));
-      const moving = fixedFacing === null && (forward !== 0 || sideways !== 0);
+      const forward = THREE.MathUtils.clamp(
+        Number(input.has("w") || input.has("arrowup"))
+          - Number(input.has("s") || input.has("arrowdown"))
+          - movementStickRef.current.y,
+        -1,
+        1,
+      );
+      const sideways = THREE.MathUtils.clamp(
+        Number(input.has("d") || input.has("arrowright"))
+          - Number(input.has("a") || input.has("arrowleft"))
+          + movementStickRef.current.x,
+        -1,
+        1,
+      );
+      const inputMagnitude = Math.min(1, Math.hypot(forward, sideways));
+      const moving = fixedFacing === null && inputMagnitude > 0.06;
       const wasGrounded = grounded;
       let movementSpeed = 0;
 
@@ -4710,7 +4739,7 @@ const NumatikWorldPage = () => {
         );
         if (moving) {
           direction.normalize();
-          const speed = input.has("shift") ? 10 : 6.2;
+          const speed = (input.has("shift") ? 10 : 6.2) * inputMagnitude;
           movementSpeed = speed;
           playerPosition.x += direction.x * speed * dt;
           playerPosition.z += direction.z * speed * dt;
@@ -4743,6 +4772,8 @@ const NumatikWorldPage = () => {
           pendingTreasureRef.current = nearbyTreasure;
           setQuestion(makeQuestion());
           setAnswerFeedback(null);
+          setAnswerOutcome(null);
+          setQuestionResolved(false);
         }
       }
       if (fixedFacing !== null) {
@@ -5582,27 +5613,31 @@ const NumatikWorldPage = () => {
       renderer.dispose();
       renderer.domElement.remove();
       keysRef.current.clear();
+      movementStickRef.current = { x: 0, y: 0 };
+      movementStickPointerRef.current = null;
     };
   }, [gameStarted, selectedIsland, selectedAvatarId]);
 
   const answerQuestion = (answer: number) => {
-    if (!question || !pendingTreasureRef.current) return;
+    if (!question || !pendingTreasureRef.current || questionResolved) return;
+    setAnswerOutcome(null);
     if (answer !== question.answer) {
-      setAnswerFeedback("Belum tepat. Coba hitung sekali lagi!");
+      setWrongAnswerCount((count) => count + 1);
+      setAnswerOutcome("wrong");
+      setAnswerFeedback(`Belum tepat! +${TREASURE_WRONG_POINTS} poin. Coba hitung sekali lagi.`);
       return;
     }
     const collectedTreasureId = pendingTreasureRef.current.id;
-    pendingTreasureRef.current = null;
     setCollectedTreasureIds((ids) => [...ids, collectedTreasureId]);
     const nextTreasuresFound = treasuresFound + 1;
     setTreasuresFound(nextTreasuresFound);
-    setScore((value) => value + 10);
+    setScore((value) => value + TREASURE_CORRECT_POINTS);
+    setQuestionResolved(true);
+    setAnswerOutcome("correct");
+    setAnswerFeedback(`Benar! +${TREASURE_CORRECT_POINTS} poin.`);
     if (nextTreasuresFound >= TREASURE_COUNT) {
       gameCompleteRef.current = true;
-      setGameComplete(true);
     }
-    setQuestion(null);
-    setAnswerFeedback(null);
   };
 
   useEffect(() => {
@@ -5610,6 +5645,11 @@ const NumatikWorldPage = () => {
   }, [question]);
 
   const restartAdventure = () => {
+    const music = worldMusicRef.current;
+    music?.pause();
+    if (music) music.currentTime = 0;
+    setMusicPlaying(false);
+    setMusicError(null);
     gameCompleteRef.current = false;
     setGameComplete(false);
     setTreasuresFound(0);
@@ -5617,15 +5657,85 @@ const NumatikWorldPage = () => {
     setScore(0);
     setQuestion(null);
     setGameStarted(false);
+    setQuestionResolved(false);
+    setAnswerOutcome(null);
+    setAnswerFeedback(null);
+    setWrongAnswerCount(0);
+    pendingTreasureRef.current = null;
+  };
+  const startAdventure = () => {
+    const music = worldMusicRef.current;
+    if (music) {
+      music.currentTime = 0;
+      void music.play().then(() => {
+        setMusicPlaying(true);
+        setMusicError(null);
+      }).catch((error: unknown) => {
+        console.error("NUMATIK WORLD tidak dapat memutar musik:", error);
+        setMusicPlaying(false);
+        setMusicError("Musik tidak dapat diputar. Tekan tombol musik untuk mencoba lagi.");
+      });
+    }
+    setGameStarted(true);
+  };
+  const toggleWorldMusic = () => {
+    const music = worldMusicRef.current;
+    if (!music) return;
+    if (musicPlaying) {
+      music.pause();
+      setMusicPlaying(false);
+      setMusicError(null);
+      return;
+    }
+    void music.play().then(() => {
+      setMusicPlaying(true);
+      setMusicError(null);
+    }).catch((error: unknown) => {
+      console.error("NUMATIK WORLD tidak dapat memutar musik:", error);
+      setMusicPlaying(false);
+      setMusicError("Musik tidak dapat diputar. Periksa pengaturan suara perangkat.");
+    });
+  };
+  const continueAfterAnswer = () => {
+    if (!questionResolved) return;
+    const finishedAllTreasures = treasuresFound >= TREASURE_COUNT;
+    pendingTreasureRef.current = null;
+    setQuestion(null);
+    setQuestionResolved(false);
+    setAnswerOutcome(null);
+    setAnswerFeedback(null);
+    if (finishedAllTreasures) setGameComplete(true);
   };
 
-  const holdKey = (key: string) => (event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    keysRef.current.add(key);
+  const updateMovementStick = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (movementStickPointerRef.current !== event.pointerId) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const rawX = (event.clientX - (rect.left + rect.width / 2)) / (rect.width * 0.36);
+    const rawY = (event.clientY - (rect.top + rect.height / 2)) / (rect.height * 0.36);
+    const distance = Math.hypot(rawX, rawY);
+    const normalizedDistance = Math.min(1, distance);
+    const deadZone = 0.12;
+    const adjustedDistance = normalizedDistance <= deadZone
+      ? 0
+      : (normalizedDistance - deadZone) / (1 - deadZone);
+    const next = distance === 0
+      ? { x: 0, y: 0 }
+      : { x: (rawX / distance) * adjustedDistance, y: (rawY / distance) * adjustedDistance };
+    movementStickRef.current = next;
+    setMovementStick(next);
   };
-  const releaseKey = (key: string) => (event: ReactPointerEvent<HTMLButtonElement>) => {
-    keysRef.current.delete(key);
+  const startMovementStick = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    movementStickPointerRef.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateMovementStick(event);
+  };
+  const stopMovementStick = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (movementStickPointerRef.current !== event.pointerId) return;
+    movementStickPointerRef.current = null;
+    movementStickRef.current = { x: 0, y: 0 };
+    setMovementStick({ x: 0, y: 0 });
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
   type DebugBooleanOption =
@@ -5674,6 +5784,7 @@ const NumatikWorldPage = () => {
 
   return (
     <main className="world-page">
+      <audio ref={worldMusicRef} src="/numatik-world-music.mp3" loop preload="auto" />
       <style>{`
         .world-page{position:relative;width:100%;height:100dvh;min-height:100dvh;overflow:hidden;background:#85dfff;color:#fff;font-family:var(--font-body,'Exo 2'),sans-serif}
         .world-canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
@@ -5704,6 +5815,8 @@ const NumatikWorldPage = () => {
         .world-back,.world-score{display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:9px 14px;border:1px solid rgba(255,255,255,.92);border-radius:16px;background:rgba(255,255,255,.88);color:#315d87;font:800 11px var(--font-display,'Orbitron'),sans-serif;box-shadow:0 6px 20px rgba(34,99,137,.16);backdrop-filter:blur(8px)}
         .world-back{pointer-events:auto;cursor:pointer}
         .world-score{font-size:13px;color:#3672cb}
+        .world-music-toggle{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:9px 13px;border:1px solid rgba(255,255,255,.92);border-radius:16px;background:rgba(255,255,255,.88);color:#315d87;font:800 11px var(--font-display,'Orbitron'),sans-serif;box-shadow:0 6px 20px rgba(34,99,137,.16);pointer-events:auto;cursor:pointer}
+        .world-music-error{position:absolute;z-index:4;top:76px;left:50%;transform:translateX(-50%);max-width:calc(100vw - 28px);padding:10px 14px;border:1px solid #ffd1b8;border-radius:12px;background:#fff2e9;color:#9c4a26;font-size:12px;font-weight:800;text-align:center;box-shadow:0 6px 20px rgba(34,99,137,.16)}
         .world-radar{position:absolute;z-index:2;top:82px;right:clamp(14px,3vw,34px);display:grid;justify-items:center;gap:4px;width:152px;padding:9px 10px 8px;border:1px solid rgba(255,255,255,.92);border-radius:18px;background:rgba(22,57,79,.78);box-shadow:0 6px 20px rgba(20,54,78,.2);backdrop-filter:blur(8px);color:#fff}
         .world-radar-title{font:800 10px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.1em}
         .world-radar-map{display:block;width:126px;height:126px;overflow:visible}
@@ -5722,12 +5835,9 @@ const NumatikWorldPage = () => {
         .world-bottom{position:absolute;left:50%;bottom:clamp(14px,3vh,28px);transform:translateX(-50%);padding:10px 17px;border:1px solid rgba(255,255,255,.86);border-radius:15px;background:rgba(255,255,255,.85);color:#315d87;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 5px 17px rgba(34,99,137,.14);backdrop-filter:blur(8px)}
         .world-bottom kbd{padding:3px 6px;border:1px solid #bedcf0;border-radius:6px;background:#eff9ff;color:#3974c6;font:800 10px var(--font-display,'Orbitron'),sans-serif}
         .world-hud .world-mobile-controls{pointer-events:auto}
-        .world-mobile-controls{position:absolute;left:16px;bottom:18px;display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(2,46px);gap:5px}
-        .world-mobile-controls button{border:1px solid rgba(255,255,255,.85);border-radius:14px;background:rgba(64,130,202,.84);color:#fff;font-size:18px;font-weight:900;touch-action:none}
-        .world-mobile-controls .world-up{grid-column:2;grid-row:1}
-        .world-mobile-controls .world-left{grid-column:1;grid-row:2}
-        .world-mobile-controls .world-down{grid-column:2;grid-row:2}
-        .world-mobile-controls .world-right{grid-column:3;grid-row:2}
+        .world-mobile-controls{position:absolute;left:max(16px,env(safe-area-inset-left));bottom:max(18px,env(safe-area-inset-bottom));display:grid;width:132px;height:132px;place-items:center;border:1px solid rgba(255,255,255,.85);border-radius:50%;background:radial-gradient(circle,rgba(86,166,224,.36) 0 42%,rgba(38,101,168,.62) 43% 100%);box-shadow:0 8px 24px rgba(17,63,108,.3),inset 0 0 0 8px rgba(255,255,255,.12);touch-action:none;user-select:none;-webkit-user-select:none}
+        .world-mobile-controls:before{position:absolute;inset:23%;border:1px solid rgba(255,255,255,.3);border-radius:50%;content:"";pointer-events:none}
+        .world-stick-knob{position:absolute;left:50%;top:50%;width:48px;height:48px;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.95);border-radius:50%;background:linear-gradient(145deg,rgba(119,205,255,.96),rgba(48,117,207,.96));box-shadow:0 4px 13px rgba(12,48,93,.35);pointer-events:none}
         .world-jump{position:absolute;right:20px;bottom:23px;width:64px;height:64px;border:1px solid #fff;border-radius:50%;background:linear-gradient(145deg,#ffb650,#ff7c68);color:#fff;font:800 10px var(--font-display,'Orbitron'),sans-serif;box-shadow:0 6px 18px rgba(163,84,59,.25);pointer-events:auto;touch-action:none}
         .world-question-layer{position:absolute;inset:0;display:grid;place-items:center;padding:16px;background:rgba(37,103,145,.28);backdrop-filter:blur(5px);pointer-events:auto}
         .world-question-card{width:min(440px,calc(100vw - 28px));padding:clamp(22px,5vw,36px);border:2px solid rgba(255,255,255,.95);border-radius:26px;background:linear-gradient(145deg,#fff,#eaf8ff);text-align:center;box-shadow:0 22px 65px rgba(22,88,128,.3)}
@@ -5737,7 +5847,16 @@ const NumatikWorldPage = () => {
         .world-answer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
         .world-answer{min-height:54px;border:0;border-radius:14px;background:linear-gradient(135deg,#49b8f3,#5175e8);color:#fff;font:800 20px var(--font-display,'Orbitron'),sans-serif;box-shadow:0 5px 12px rgba(58,116,202,.2);cursor:pointer}
         .world-answer:hover{filter:brightness(1.08);transform:translateY(-1px)}
+        .world-answer:disabled{opacity:.6;cursor:default}
         .world-feedback{min-height:24px;margin-top:12px;color:#249b83;font-size:13px;font-weight:800}
+        .world-feedback.is-correct{color:#168b63;animation:world-answer-correct .5s ease-out}
+        .world-feedback.is-wrong{color:#d66b32;animation:world-answer-wrong .35s ease-out}
+        @keyframes world-answer-correct{0%{transform:scale(.75);opacity:.4}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+        @keyframes world-answer-wrong{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+        .world-complete-score{margin:18px auto;padding:16px;border:2px solid rgba(255,255,255,.9);border-radius:20px;background:linear-gradient(135deg,#e1faff,#dcffe9);color:#219b83}
+        .world-complete-score strong{display:block;font:900 clamp(34px,8vw,48px) var(--font-display,'Orbitron'),sans-serif}
+        .world-complete-score span{font-size:12px;font-weight:800}
+        .world-complete-details{margin:10px 0 20px;color:#527294;font-size:13px;font-weight:700}
         .world-error{display:grid;place-items:center;height:100%;padding:24px;color:#315d87;text-align:center;font-weight:700}
         .world-start-screen{position:absolute;z-index:5;inset:0;overflow:auto;display:grid;place-items:center;padding:clamp(16px,4vw,40px);background:radial-gradient(ellipse at 10% 12%,rgba(255,255,255,.92),transparent 30%),radial-gradient(ellipse at 90% 85%,rgba(255,221,139,.65),transparent 34%),linear-gradient(145deg,#65d8ed 0%,#8fcef9 48%,#b5a2f5 100%);color:#34547d}
         .world-start-content{width:min(1060px,100%);margin:auto}
@@ -5850,7 +5969,8 @@ const NumatikWorldPage = () => {
         .world-start-button:hover{transform:translateY(-2px);filter:brightness(1.05)}
         .world-start-button:active{transform:translateY(3px);box-shadow:0 3px 0 #168d7d}
         .world-start-button:focus-visible,.world-island-card:focus-visible,.world-start-back:focus-visible,.world-avatar-card:focus-visible{outline:3px solid #ffbc58;outline-offset:3px}
-        @media(max-width:600px){.world-top{align-items:flex-start}.world-brand{gap:7px}.world-title{font-size:clamp(11px,3.2vw,17px)}.world-subtitle{display:none}.world-brand-mark{width:34px;height:34px}.world-back{min-height:36px;padding:7px 9px;font-size:9px}.world-score{min-height:36px;padding:7px 10px;font-size:11px}.world-radar{top:68px;right:10px;width:122px;padding:7px 6px}.world-radar-map{width:104px;height:104px}.world-bottom{bottom:102px;max-width:calc(100vw - 26px);font-size:10px}.world-mobile-controls{grid-template-columns:repeat(3,42px);grid-template-rows:repeat(2,42px);gap:4px;left:12px;bottom:14px}.world-jump{right:14px;bottom:20px;width:58px;height:58px}}
+        @media(max-width:600px){.world-top{align-items:flex-start}.world-brand{gap:7px}.world-title{font-size:clamp(11px,3.2vw,17px)}.world-subtitle{display:none}.world-brand-mark{width:34px;height:34px}.world-back{min-height:36px;padding:7px 9px;font-size:9px}.world-score{min-height:36px;padding:7px 10px;font-size:11px}.world-radar{top:68px;right:10px;width:122px;padding:7px 6px}.world-radar-map{width:104px;height:104px}.world-bottom{bottom:102px;max-width:calc(100vw - 26px);font-size:10px}.world-mobile-controls{width:120px;height:120px;left:max(12px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom))}.world-jump{right:max(14px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));width:58px;height:58px}}
+        @media(orientation:landscape) and (max-height:520px){.world-mobile-controls{width:108px;height:108px;left:max(12px,env(safe-area-inset-left));bottom:max(10px,env(safe-area-inset-bottom))}.world-mobile-controls:before{inset:22%}.world-stick-knob{width:42px;height:42px}.world-jump{right:max(16px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));width:54px;height:54px}.world-bottom{bottom:max(10px,env(safe-area-inset-bottom));padding:8px 11px;font-size:10px}}
         @media(max-width:760px){.world-start-screen{place-items:start center;padding:14px}.world-start-content{margin:auto}.world-start-top{margin-bottom:13px}.world-start-heading{margin-bottom:16px}.world-start-mark{width:47px;height:47px;margin-bottom:9px;border-radius:16px}.world-lobby{grid-template-columns:1fr;gap:11px}.world-lobby-panel{padding:15px;border-radius:20px}.world-lobby-panel h2{font-size:13px}.world-lobby-intro{margin-bottom:12px;font-size:11px}.world-rules{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px;padding:10px}.world-rule{font-size:10px}.world-start-button{min-height:48px;margin-top:12px}.world-avatar-grid{grid-auto-flow:column;grid-auto-columns:minmax(250px,82vw);grid-template-columns:none;overflow-x:auto;padding:5px 4px 12px;scroll-snap-type:x mandatory;touch-action:pan-x}.world-avatar-card{scroll-snap-align:center;height:100%}.world-avatar-preview{height:142px}.world-avatar-pick{flex:none}}
         @media(max-width:390px){.world-island-grid{gap:7px}.world-island-card{grid-template-columns:34px minmax(0,1fr);gap:7px;min-height:66px;padding:8px}.world-island-emoji{width:34px;height:34px;font-size:21px}.world-island-name{font-size:9px}.world-island-description{font-size:9px}.world-start-badge{font-size:9px;padding:7px 9px}}
         @media(prefers-reduced-motion:reduce){.world-answer:hover{transform:none}.world-radar-treasure{animation:none}}
@@ -5948,7 +6068,7 @@ const NumatikWorldPage = () => {
                   <button className="world-avatar-change" type="button" onClick={() => setAvatarPickerOpen(true)}>
                     GANTI AVATAR · {AVATAR_PRESETS.find((preset) => preset.id === selectedAvatarId)?.name}
                   </button>
-                  <button className="world-start-button" type="button" onClick={() => setGameStarted(true)}>
+                  <button className="world-start-button" type="button" onClick={startAdventure}>
                     <Sparkles size={17} /> MULAI PETUALANGAN <span aria-hidden="true">→</span>
                   </button>
                 </section>
@@ -5970,8 +6090,15 @@ const NumatikWorldPage = () => {
                   <div className="world-subtitle">{ISLANDS.find(({ id }) => id === selectedIsland)?.emoji} {ISLANDS.find(({ id }) => id === selectedIsland)?.name} · cari {TREASURE_COUNT} harta karun!</div>
                 </div>
               </div>
-              <div className="world-score" aria-live="polite">🧰 HARTA {treasuresFound}/{TREASURE_COUNT} · {score} POIN</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button className="world-music-toggle" type="button" onClick={toggleWorldMusic} aria-label={musicPlaying ? "Matikan musik" : "Nyalakan musik"} aria-pressed={musicPlaying}>
+                  {musicPlaying ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                  MUSIK {musicPlaying ? "ON" : "OFF"}
+                </button>
+                <div className="world-score" aria-live="polite">🧰 HARTA {treasuresFound}/{TREASURE_COUNT} · {score} POIN</div>
+              </div>
             </header>
+            {musicError && <div className="world-music-error" role="status">{musicError}</div>}
             <aside className="world-radar" aria-label="Radar lokasi harta karun">
               <span className="world-radar-title">RADAR HARTA</span>
               <svg className="world-radar-map" viewBox="0 0 120 120" role="img" aria-label={`Peta lokasi pemain dan ${TREASURE_COUNT - treasuresFound} harta karun tersisa`}>
@@ -5992,15 +6119,27 @@ const NumatikWorldPage = () => {
               </div>
             </aside>
             <div className="world-bottom">
-              Jelajahi pulau &nbsp; <kbd>W A S D</kbd> bergerak &nbsp; <kbd>SPACE</kbd> lompat &nbsp; seret layar untuk melihat
+              {mobile ? <>Gunakan analog untuk bergerak &nbsp; <kbd>LOMPAT</kbd> &nbsp; seret layar untuk melihat</> : <>Jelajahi pulau &nbsp; <kbd>W A S D</kbd> bergerak &nbsp; <kbd>SPACE</kbd> lompat &nbsp; seret layar untuk melihat</>}
             </div>
             {mobile && (
               <>
-                <div className="world-mobile-controls" aria-label="Kontrol gerak">
-                  <button className="world-up" onPointerDown={holdKey("w")} onPointerUp={releaseKey("w")} onPointerCancel={releaseKey("w")} aria-label="Maju">▲</button>
-                  <button className="world-left" onPointerDown={holdKey("a")} onPointerUp={releaseKey("a")} onPointerCancel={releaseKey("a")} aria-label="Kiri">◀</button>
-                  <button className="world-down" onPointerDown={holdKey("s")} onPointerUp={releaseKey("s")} onPointerCancel={releaseKey("s")} aria-label="Mundur">▼</button>
-                  <button className="world-right" onPointerDown={holdKey("d")} onPointerUp={releaseKey("d")} onPointerCancel={releaseKey("d")} aria-label="Kanan">▶</button>
+                <div
+                  className="world-mobile-controls"
+                  aria-label="Analog untuk bergerak"
+                  role="application"
+                  onPointerDown={startMovementStick}
+                  onPointerMove={updateMovementStick}
+                  onPointerUp={stopMovementStick}
+                  onPointerCancel={stopMovementStick}
+                  onLostPointerCapture={stopMovementStick}
+                >
+                  <span
+                    className="world-stick-knob"
+                    style={{
+                      left: `calc(50% + ${movementStick.x * 36}px)`,
+                      top: `calc(50% + ${movementStick.y * 36}px)`,
+                    }}
+                  />
                 </div>
                 <button className="world-jump" onPointerDown={() => { jumpRequestedRef.current = true; }}>LOMPAT</button>
               </>
@@ -6120,7 +6259,12 @@ const NumatikWorldPage = () => {
             <section className="world-question-card" role="dialog" aria-modal="true" aria-labelledby="world-complete-title">
               <div className="world-question-kicker">🎉 PETUALANGAN SELESAI</div>
               <h2 className="world-question-title" id="world-complete-title">Semua harta ditemukan!</h2>
-              <p className="world-lobby-intro">Kamu berhasil mengumpulkan {TREASURE_COUNT} harta karun dan mendapat {score} poin.</p>
+              <p className="world-lobby-intro">Kamu berhasil menjawab semua pertanyaan harta karun!</p>
+              <div className="world-complete-score">
+                <strong>{score}</strong>
+                <span>POIN TERKUMPUL · MAKSIMAL {TREASURE_COUNT * TREASURE_CORRECT_POINTS}</span>
+              </div>
+              <p className="world-complete-details">{treasuresFound}/{TREASURE_COUNT} jawaban benar · {wrongAnswerCount} jawaban salah bernilai {TREASURE_WRONG_POINTS} poin</p>
               <button className="world-start-button" type="button" onClick={restartAdventure}>MAIN LAGI</button>
             </section>
           </div>
@@ -6132,12 +6276,22 @@ const NumatikWorldPage = () => {
             <div className="world-question-kicker">🧰 HARTA KARUN</div>
             <h2 className="world-question-title" id="world-question-title">Jawab untuk mendapatkan harta!</h2>
             <div className="world-question-prompt">{question.prompt}</div>
+            <button className="world-music-toggle" type="button" onClick={toggleWorldMusic} aria-label={musicPlaying ? "Matikan musik" : "Nyalakan musik"} aria-pressed={musicPlaying}>
+              {musicPlaying ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              MUSIK {musicPlaying ? "ON" : "OFF"}
+            </button>
+            {musicError && <div className="world-feedback is-wrong" role="status">{musicError}</div>}
             <div className="world-answer-grid">
               {question.options.map((option) => (
-                <button key={option} className="world-answer" onClick={() => answerQuestion(option)}>{option}</button>
+                <button key={option} className="world-answer" disabled={questionResolved} onClick={() => answerQuestion(option)}>{option}</button>
               ))}
             </div>
-            <div className="world-feedback" role="status" aria-live="polite">{answerFeedback}</div>
+            <div className={`world-feedback${answerOutcome ? ` is-${answerOutcome}` : ""}`} role="status" aria-live="polite">{answerFeedback}</div>
+            {questionResolved && (
+              <button className="world-start-button" type="button" onClick={continueAfterAnswer}>
+                {treasuresFound >= TREASURE_COUNT ? "LIHAT HASIL" : "LANJUTKAN"}
+              </button>
+            )}
           </section>
         </div>
       )}

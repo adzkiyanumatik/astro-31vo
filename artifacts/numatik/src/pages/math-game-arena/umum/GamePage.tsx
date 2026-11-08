@@ -18,8 +18,8 @@ type MoveInput = { x: number; y: number };
 type QualitySetting = "low" | "medium" | "high";
 type BrightnessSetting = "normal" | "bright" | "very-bright";
 type WeaponId = "rifle" | "pistol";
-type GamePhase = "combat" | "supply" | "treasure" | "paused" | "arena-select" | "gameover" | "complete";
-type ArenaId = "training" | "ruins" | "arctic" | "jungle" | "harbor" | "volcano";
+type GamePhase = "combat" | "supply" | "treasure" | "treasure-complete" | "paused" | "arena-select" | "gameover" | "complete";
+type ArenaId = "training" | "ruins" | "arctic" | "jungle";
 type SupplyQuestion = { prompt: string; answer: number; options: number[] };
 type SoundCue = "rifle" | "pistol" | "hit" | "headshot" | "enemy" | "wave" | "correct" | "wrong" | "gameover" | "reload" | "empty" | "step";
 type EnemyVoiceKind = "scream" | "death" | "hurt";
@@ -132,6 +132,8 @@ const WEAPON_CONFIG: Record<WeaponId, {
 };
 const STARTING_ENEMIES = 10;
 const TREASURE_COUNT = 5;
+const TREASURE_CORRECT_POINTS = 20;
+const TREASURE_WRONG_POINTS = 0;
 const GUNFIRE_ALERT_RADIUS = 36;
 const ARENAS: Array<{
   id: ArenaId;
@@ -233,46 +235,6 @@ const ARENAS: Array<{
     sunlight: "#d2df83",
     dust: "#b2c47d",
   },
-  {
-    id: "harbor",
-    name: "Pelabuhan Baja",
-    subtitle: "Dermaga kontainer dalam siaga",
-    description: "Dermaga basah, baja berkarat, dan cahaya mercusuar.",
-    terrain: "Dermaga · Koridor baja",
-    tactic: "Susuri koridor kontainer dan hindari berlari di jalur terbuka.",
-    icon: "⚓",
-    horizon: "#45677b",
-    midday: "#7fa2ae",
-    zenith: "#243c53",
-    ground: "#687778",
-    road: "#48575d",
-    clearing: "#849493",
-    concrete: "#79888a",
-    metal: "#607c8a",
-    accent: "#42d5dc",
-    sunlight: "#83d6df",
-    dust: "#9db8b5",
-  },
-  {
-    id: "volcano",
-    name: "Kawah Merah",
-    subtitle: "Medan vulkanik berbahaya",
-    description: "Batu hitam, langit membara, dan pijar lava di kejauhan.",
-    terrain: "Vulkanik · Perlindungan batu",
-    tactic: "Berpindah cepat antarbatu dan tetap waspada di area terbuka.",
-    icon: "🌋",
-    horizon: "#733d35",
-    midday: "#b45c3a",
-    zenith: "#302b38",
-    ground: "#51443d",
-    road: "#393536",
-    clearing: "#71503c",
-    concrete: "#6d5a50",
-    metal: "#6d625b",
-    accent: "#ff6037",
-    sunlight: "#ff8653",
-    dust: "#c7835e",
-  },
 ];
 const BEST_SCORE_KEY = "numatik-strike-best-score";
 const TOUCH_LOOK_SENSITIVITY_KEY = "numatik-strike-touch-look-sensitivity";
@@ -303,9 +265,9 @@ const QUALITY_FOG: Record<QualitySetting, { near: number; far: number }> = {
   high: { near: 40, far: 160 },
 };
 const BRIGHTNESS_PRESETS: Record<BrightnessSetting, { label: string; exposure: number; hemisphereIntensity: number }> = {
-  normal: { label: "Normal", exposure: 1.22, hemisphereIntensity: 2.7 },
-  bright: { label: "Terang", exposure: 1.3, hemisphereIntensity: 3.05 },
-  "very-bright": { label: "Sangat Terang", exposure: 1.38, hemisphereIntensity: 3.4 },
+  normal: { label: "Normal", exposure: 1.42, hemisphereIntensity: 3.6 },
+  bright: { label: "Terang", exposure: 1.55, hemisphereIntensity: 4.1 },
+  "very-bright": { label: "Sangat Terang", exposure: 1.68, hemisphereIntensity: 4.6 },
 };
 const createSupplyQuestion = (waveNumber: number): SupplyQuestion => {
   const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
@@ -414,6 +376,13 @@ const GamePage = () => {
   const [enemyCount, setEnemyCount] = useState(0);
   const [treasuresFound, setTreasuresFound] = useState(0);
   const treasuresFoundRef = useRef(0);
+  const [treasureCorrectAnswers, setTreasureCorrectAnswers] = useState(0);
+  const treasureCorrectAnswersRef = useRef(0);
+  const [treasureWrongAnswers, setTreasureWrongAnswers] = useState(0);
+  const treasureWrongAnswersRef = useRef(0);
+  const [treasureQuizScore, setTreasureQuizScore] = useState(0);
+  const treasureQuizScoreRef = useRef(0);
+  const treasureFirstAttemptRef = useRef(true);
   const [wave, setWave] = useState(1);
   const waveRef = useRef(1);
   const [playerHealth, setPlayerHealth] = useState(100);
@@ -622,13 +591,13 @@ const GamePage = () => {
 
     const hemisphereLight = new THREE.HemisphereLight(
       0x84909a,
-      0x40372c,
+      0x635749,
       BRIGHTNESS_PRESETS[brightnessRef.current].hemisphereIntensity,
     );
     hemisphereLightRef.current = hemisphereLight;
     scene.add(hemisphereLight);
-    scene.add(new THREE.AmbientLight(0x777b79, 0.2));
-    const keyLight = new THREE.DirectionalLight(arena.sunlight, 2.9);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.48));
+    const keyLight = new THREE.DirectionalLight(arena.sunlight, 3.6);
     keyLight.position.set(-32, 42, -24);
     keyLight.castShadow = false;
     keyLight.shadow.camera.left = -70;
@@ -1305,23 +1274,20 @@ const GamePage = () => {
             addMesh(boxGeometry, accentMaterial, side * 67, 8, z - 6.6, 2.4, 0.18, 0.12);
           });
         });
-      } else if (arena.id === "arctic" || arena.id === "volcano") {
+      } else if (arena.id === "arctic") {
         [-1, 1].forEach((side) => {
           [-44, -22, 8, 34, 50].forEach((z, index) => {
-            const height = arena.id === "arctic" ? 7 + (index % 3) * 2 : 9 + (index % 3) * 3;
+            const height = 7 + (index % 3) * 2;
             addMesh(
               coneGeometry,
               landmarkMaterial,
               side * 66,
               height / 2,
               z,
-              arena.id === "arctic" ? 3.2 : 4.5,
+              3.2,
               height,
-              arena.id === "arctic" ? 3.2 : 4.5,
+              3.2,
             );
-            if (arena.id === "volcano" && index % 2 === 0) {
-              addMesh(coneGeometry, accentMaterial, side * 66, height * 0.72, z, 0.36, 1.8, 0.36);
-            }
           });
         });
       } else if (arena.id === "jungle") {
@@ -1330,15 +1296,6 @@ const GamePage = () => {
             const x = side * 66;
             addMesh(trunkGeometry, landmarkMaterial, x, 5.5, z, 1, 1, 1);
             addMesh(coneGeometry, accentMaterial, x, 11 + (index % 2), z, 5.2, 8, 5.2);
-          });
-        });
-      } else if (arena.id === "harbor") {
-        [-1, 1].forEach((side) => {
-          const x = side * 67;
-          [-1, 1].forEach((zSide) => {
-            addMesh(boxGeometry, landmarkMaterial, x, 9, zSide * 38, 1.1, 18, 1.1);
-            addMesh(boxGeometry, landmarkMaterial, x, 18, zSide * 38, 1.1, 1.1, 40);
-            addMesh(boxGeometry, accentMaterial, x, 16, zSide * 38, 0.28, 4, 0.28);
           });
         });
       }
@@ -1406,19 +1363,7 @@ const GamePage = () => {
             { x: 10, y: 0.65, z: -38, w: 11, h: 1.3, d: 1.2, solid: true, rotY: 0.1, color: "#78804b" },
             { x: 0, y: 0.8, z: -29, w: 1.3, h: 1.6, d: 8, solid: true, color: "#626749" },
           ]
-          : arena.id === "harbor"
-            ? [
-              { x: -10, y: 2.1, z: -38, w: 8, h: 4.2, d: 2.5, solid: true, color: "#657d82" },
-              { x: 10, y: 2.1, z: -38, w: 8, h: 4.2, d: 2.5, solid: true, color: "#8a5945" },
-              { x: 0, y: 1.1, z: -29, w: 2, h: 2.2, d: 7, solid: true, color: "#546d78" },
-            ]
-            : arena.id === "volcano"
-              ? [
-                { x: -10, y: 1, z: -38, w: 9, h: 2, d: 2, solid: true, rotY: -0.15, color: "#51443d" },
-                { x: 10, y: 1.1, z: -38, w: 9, h: 2.2, d: 2, solid: true, rotY: 0.15, color: "#71503c" },
-                { x: 0, y: 0.9, z: -29, w: 2, h: 1.8, d: 8, solid: true, color: "#393536" },
-              ]
-              : [];
+          : [];
     addBoxInstances(bunkerMat, arenaCover);
 
     let crateVariant = 0;
@@ -1551,6 +1496,7 @@ const GamePage = () => {
         const side = sceneryRandom() < 0.5 ? -1 : 1;
         const x = side * (24 + sceneryRandom() * 30);
         const z = -34 + sceneryRandom() * 77;
+        if (Math.abs(x) + width / 2 > 56 || Math.abs(z) + depth / 2 > 55) continue;
         if (Math.abs(x) < 23 || z < -35 || z > 43) continue;
         if (x * x + (z - 51) * (z - 51) < 15 * 15) continue;
         if (soldierSpawns.some(([spawnX, spawnZ]) => Math.hypot(x - spawnX, z - spawnZ) < 11)) continue;
@@ -1570,6 +1516,136 @@ const GamePage = () => {
       }
       throw new Error("Tidak cukup ruang aman untuk dekorasi Numatik Strike.");
     };
+    const addArenaObstacle = (
+      geometry: THREE.BufferGeometry,
+      obstacleMaterial: THREE.Material,
+      x: number,
+      y: number,
+      z: number,
+      width: number,
+      height: number,
+      depth: number,
+      collisionWidth = width,
+      collisionDepth = depth,
+    ) => {
+      const mesh = new THREE.Mesh(geometry, obstacleMaterial);
+      mesh.position.set(x, y, z);
+      mesh.scale.set(width, height, depth);
+      mesh.userData.strikeShadowEligible = true;
+      scene.add(mesh);
+      worldOccluders.push(mesh);
+      solidObstacles.push({ x, z, width: collisionWidth, depth: collisionDepth });
+      addContactShadows([{
+        x, y: height / 2, z, w: collisionWidth, h: height, d: collisionDepth, solid: true,
+      }]);
+      return mesh;
+    };
+    const addArenaDetail = (
+      geometry: THREE.BufferGeometry,
+      detailMaterial: THREE.Material,
+      x: number,
+      y: number,
+      z: number,
+      width: number,
+      height: number,
+      depth: number,
+    ) => {
+      const mesh = new THREE.Mesh(geometry, detailMaterial);
+      mesh.position.set(x, y, z);
+      mesh.scale.set(width, height, depth);
+      mesh.userData.strikeShadowEligible = true;
+      scene.add(mesh);
+      return mesh;
+    };
+    const addArenaStructures = () => {
+      if (arena.id === "training") return;
+      const box = new THREE.BoxGeometry(1, 1, 1);
+      const cylinder = new THREE.CylinderGeometry(0.5, 0.5, 1, 10);
+      const cone = new THREE.ConeGeometry(0.5, 1, arena.id === "arctic" ? 7 : 9);
+      const rock = new THREE.DodecahedronGeometry(0.5, 1);
+      const frameMat = material(arena.metal, 0.56, 0.42);
+      const glassMat = new THREE.MeshStandardMaterial({
+        color: arena.accent,
+        emissive: arena.accent,
+        emissiveIntensity: 0.24,
+        roughness: 0.22,
+        metalness: 0.45,
+      });
+      materials.push(glassMat);
+
+      if (arena.id === "ruins") {
+        const buildingMat = material("#77716c", 0.96, 0.02);
+        const rubbleMat = material("#a18e7c", 0.98, 0.01);
+        for (let index = 0; index < 4; index += 1) {
+          const position = findDecorationPosition(13, 11);
+          const width = index % 2 ? 9 : 12;
+          const height = index % 2 ? 9 : 13;
+          addArenaObstacle(box, buildingMat, position.x, height / 2, position.z, width, height, 7);
+          for (let floor = 0; floor < 3; floor += 1) {
+            for (let column = 0; column < 2; column += 1) {
+              const windowX = position.x + (column ? 1 : -1) * width * 0.24;
+              const windowY = 2.2 + floor * 3.1;
+              addArenaDetail(box, glassMat, windowX, windowY, position.z + 3.56, 1.15, 1.05, 0.08);
+              addArenaDetail(box, frameMat, windowX, windowY - 0.62, position.z + 3.62, 1.45, 0.12, 0.12);
+            }
+          }
+          addArenaDetail(box, rubbleMat, position.x - width * 0.38, 0.55, position.z + 4.1, 3.2, 1.1, 2.6);
+          addArenaDetail(box, rubbleMat, position.x + width * 0.4, 0.4, position.z - 3.8, 2.2, 0.8, 1.6);
+        }
+      } else if (arena.id === "arctic") {
+        const baseMat = material("#8da8b2", 0.72, 0.18);
+        const snowMat = material("#e2f1f0", 0.92, 0.02);
+        for (let index = 0; index < 3; index += 1) {
+          const position = findDecorationPosition(16, 12);
+          const width = index === 1 ? 12 : 9;
+          const depth = index === 1 ? 8 : 7;
+          const height = index === 1 ? 5.2 : 4.4;
+          addArenaObstacle(box, baseMat, position.x, height / 2, position.z, width, height, depth);
+          addArenaDetail(box, snowMat, position.x, height + 0.16, position.z, width + 0.45, 0.32, depth + 0.45);
+          addArenaDetail(box, glassMat, position.x, 2.4, position.z + depth / 2 + 0.06, 2.1, 1.1, 0.1);
+          addArenaDetail(box, frameMat, position.x - width * 0.32, 1.2, position.z + depth / 2 + 0.12, 0.16, 2.4, 0.16);
+          addArenaDetail(box, frameMat, position.x + width * 0.32, 1.2, position.z + depth / 2 + 0.12, 0.16, 2.4, 0.16);
+          for (let drift = 0; drift < 2; drift += 1) {
+            const offset = drift ? 1 : -1;
+            addArenaDetail(
+              cone,
+              snowMat,
+              position.x + offset * (width / 2 + 1.1),
+              1.35,
+              position.z - depth * 0.22,
+              3.4,
+              2.7,
+              2.8,
+            );
+          }
+        }
+      } else if (arena.id === "jungle") {
+        const trunkMat = material("#594535", 0.94, 0.01);
+        const canopyMats = [
+          material("#536d3f", 0.96, 0.01),
+          material("#78934a", 0.96, 0.01),
+          material("#3f6245", 0.96, 0.01),
+        ];
+        const vineMat = material("#a2a848", 0.9, 0.02);
+        for (let index = 0; index < 9; index += 1) {
+          const position = findDecorationPosition(9, 9);
+          const trunkHeight = 7 + (index % 3);
+          addArenaObstacle(cylinder, trunkMat, position.x, trunkHeight / 2, position.z, 1.25, trunkHeight, 1.25, 1.5, 1.5);
+          addArenaDetail(
+            cone,
+            canopyMats[index % canopyMats.length]!,
+            position.x,
+            trunkHeight + 1,
+            position.z,
+            7 + (index % 2),
+            7,
+            7 + (index % 2),
+          );
+          addArenaDetail(cylinder, vineMat, position.x + 0.7, trunkHeight * 0.56, position.z + 0.35, 0.09, 3.8, 0.09);
+        }
+      }
+    };
+    addArenaStructures();
     const scatterSpecs = (
       count: number,
       width: number,
@@ -2270,6 +2346,13 @@ const GamePage = () => {
     setScore(0);
     treasuresFoundRef.current = 0;
     setTreasuresFound(0);
+    treasureCorrectAnswersRef.current = 0;
+    setTreasureCorrectAnswers(0);
+    treasureWrongAnswersRef.current = 0;
+    setTreasureWrongAnswers(0);
+    treasureQuizScoreRef.current = 0;
+    setTreasureQuizScore(0);
+    treasureFirstAttemptRef.current = true;
     activeTreasureRef.current = null;
     treasureChests.forEach((chest) => {
       chest.collected = false;
@@ -3798,6 +3881,7 @@ const GamePage = () => {
       setAiming(false);
       setMobileSprintHeld(false);
       activeTreasureRef.current = chest;
+      treasureFirstAttemptRef.current = true;
       setPhase("treasure");
       setTreasureAnswerCorrect(null);
       const question = createSupplyQuestion(Math.min(treasuresFoundRef.current + 1, TREASURE_COUNT));
@@ -3815,6 +3899,12 @@ const GamePage = () => {
         const chest = activeTreasureRef.current;
         if (!chest) return;
         if (selectedAnswer === question.answer) {
+          if (treasureFirstAttemptRef.current) {
+            treasureCorrectAnswersRef.current += 1;
+            setTreasureCorrectAnswers(treasureCorrectAnswersRef.current);
+          }
+          treasureQuizScoreRef.current += TREASURE_CORRECT_POINTS;
+          setTreasureQuizScore(treasureQuizScoreRef.current);
           chest.collected = true;
           chest.group.visible = false;
           activeTreasureRef.current = null;
@@ -3824,12 +3914,17 @@ const GamePage = () => {
           }
           treasuresFoundRef.current += 1;
           setTreasuresFound(treasuresFoundRef.current);
-          addScore(200);
-          setSupplyMessage(`Benar! Peti ditemukan. ${TREASURE_COUNT - treasuresFoundRef.current} peti lagi.`);
+          addScore(TREASURE_CORRECT_POINTS);
+          setSupplyMessage(`Benar! +${TREASURE_CORRECT_POINTS} poin. Peti ditemukan. ${TREASURE_COUNT - treasuresFoundRef.current} peti lagi.`);
           setTreasureAnswerCorrect(true);
           playSound("correct");
+          if (treasuresFoundRef.current >= TREASURE_COUNT) setPhase("treasure-complete");
         } else {
-          setSupplyMessage("Jawaban belum tepat. Coba lagi untuk membuka peti.");
+          treasureFirstAttemptRef.current = false;
+          treasureWrongAnswersRef.current += 1;
+          setTreasureWrongAnswers(treasureWrongAnswersRef.current);
+          addScore(TREASURE_WRONG_POINTS);
+          setSupplyMessage(`Jawaban belum tepat. +${TREASURE_WRONG_POINTS} poin. Coba lagi untuk membuka peti.`);
           setTreasureAnswerCorrect(false);
           playSound("wrong");
         }
@@ -3860,6 +3955,11 @@ const GamePage = () => {
       }
     };
     nextWaveRef.current = () => {
+      if (gamePhaseRef.current === "treasure-complete") {
+        if (soldiers.every((soldier) => !soldier.alive)) finishGame(true);
+        else setPhase("combat");
+        return;
+      }
       if (gamePhaseRef.current !== "treasure" || !supplyResolvedRef.current) return;
       if (activeTreasureRef.current) {
         const question = createSupplyQuestion(Math.min(treasuresFoundRef.current + 1, TREASURE_COUNT));
@@ -3876,8 +3976,8 @@ const GamePage = () => {
       setTreasureAnswerCorrect(null);
       supplyResolvedRef.current = false;
       activeTreasureRef.current = null;
-      if (treasuresFoundRef.current >= TREASURE_COUNT && soldiers.every((soldier) => !soldier.alive)) {
-        finishGame(true);
+      if (treasuresFoundRef.current >= TREASURE_COUNT) {
+        setPhase("treasure-complete");
       } else {
         setPhase("combat");
       }
@@ -3905,6 +4005,13 @@ const GamePage = () => {
       setEnemyCount(STARTING_ENEMIES);
       treasuresFoundRef.current = 0;
       setTreasuresFound(0);
+      treasureCorrectAnswersRef.current = 0;
+      setTreasureCorrectAnswers(0);
+      treasureWrongAnswersRef.current = 0;
+      setTreasureWrongAnswers(0);
+      treasureQuizScoreRef.current = 0;
+      setTreasureQuizScore(0);
+      treasureFirstAttemptRef.current = true;
       activeTreasureRef.current = null;
       treasureChests.forEach((chest) => {
         chest.collected = false;
@@ -4783,7 +4890,7 @@ const GamePage = () => {
   };
   const openArenaPicker = () => {
     const currentPhase = gamePhaseRef.current;
-    if (currentPhase !== "combat" && currentPhase !== "paused" && currentPhase !== "gameover" && currentPhase !== "complete") return;
+    if (currentPhase !== "combat" && currentPhase !== "paused" && currentPhase !== "treasure-complete" && currentPhase !== "gameover" && currentPhase !== "complete") return;
     arenaPickerReturnPhase.current = currentPhase;
     setPendingArena(selectedArena);
     if (currentPhase === "combat") pauseGameRef.current?.();
@@ -4817,6 +4924,13 @@ const GamePage = () => {
     setWave(1);
     treasuresFoundRef.current = 0;
     setTreasuresFound(0);
+    treasureCorrectAnswersRef.current = 0;
+    setTreasureCorrectAnswers(0);
+    treasureWrongAnswersRef.current = 0;
+    setTreasureWrongAnswers(0);
+    treasureQuizScoreRef.current = 0;
+    setTreasureQuizScore(0);
+    treasureFirstAttemptRef.current = true;
     activeTreasureRef.current = null;
     supplyResolvedRef.current = false;
     supplyQuestionRef.current = null;
@@ -4901,7 +5015,7 @@ const GamePage = () => {
         .strike-brightness-options button{min-height:34px;padding:5px 4px;border:1px solid rgba(202,211,211,.24);background:rgba(9,18,23,.74);color:#c7d6d8;font:500 8px var(--font-body,'Exo 2'),sans-serif;cursor:pointer}
         .strike-brightness-options button[aria-pressed="true"]{border-color:#f3d391;background:rgba(120,99,57,.35);color:#fff1c9}
         .strike-settings-toggle:focus-visible,.strike-settings-panel select:focus-visible,.strike-brightness-options button:focus-visible{outline:2px solid #8fe3ec;outline-offset:2px}
-        .strike-atmosphere-vignette{position:absolute;z-index:0;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(23,25,25,.16),rgba(67,49,32,.08) 56%,rgba(22,20,17,.24)),radial-gradient(ellipse at 50% 44%,transparent 34%,rgba(24,25,22,.2) 72%,rgba(17,18,16,.58) 100%);mix-blend-mode:multiply}
+        .strike-atmosphere-vignette{position:absolute;z-index:0;inset:0;pointer-events:none;background:none}
          .strike-reticle{position:absolute;left:50%;top:50%;width:36px;height:36px;transform:translate(-50%,-50%);opacity:.78;transition:opacity .15s,filter .15s}
          .strike-reticle span{position:absolute;display:block;background:#e8e0c3;border-radius:1px;box-shadow:0 0 3px rgba(18,20,15,.8)}
          .strike-reticle .reticle-top,.strike-reticle .reticle-bottom{left:17px;width:2px;height:7px}
@@ -4967,16 +5081,19 @@ const GamePage = () => {
          .strike-phase-layer{position:absolute;z-index:6;inset:0;display:grid;place-items:center;padding:16px;background:rgba(3,10,18,.78);backdrop-filter:blur(7px);pointer-events:auto}
          .strike-phase-card{width:min(520px,calc(100vw - 28px));max-height:calc(100dvh - 32px);overflow:auto;padding:clamp(22px,5vw,38px);border:1px solid rgba(92,220,230,.38);background:linear-gradient(145deg,rgba(9,28,42,.98),rgba(6,14,27,.98));box-shadow:0 24px 90px rgba(0,0,0,.42);text-align:center}
          .strike-phase-card.is-arena-picker{width:min(1080px,calc(100vw - 28px));max-height:calc(100dvh - 24px);padding:clamp(15px,2.4vw,27px);border-color:rgba(111,224,255,.55);background:radial-gradient(ellipse at 9% 0%,rgba(27,136,174,.22),transparent 40%),radial-gradient(ellipse at 100% 100%,rgba(112,61,198,.19),transparent 42%),linear-gradient(145deg,rgba(7,19,37,.98),rgba(8,12,27,.99));text-align:left}
+         .strike-arena-menu-button{display:inline-flex;align-items:center;gap:7px;min-height:34px;margin:0 0 12px;padding:7px 11px;border:1px solid rgba(144,203,218,.35);border-radius:7px;background:rgba(5,16,28,.72);color:#c6e2ea;font:600 8px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.08em;cursor:pointer}
+         .strike-arena-menu-button:hover{border-color:rgba(60,220,233,.7);background:rgba(17,67,82,.6);color:#e9fbff}
+         .strike-arena-menu-button:focus-visible{outline:2px solid #8fe3ec;outline-offset:2px}
          .strike-briefing-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
          .strike-briefing-kicker{display:flex;align-items:center;gap:9px;color:#8cecff;font:700 9px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.2em}
          .strike-briefing-emblem{display:grid;width:35px;height:35px;place-items:center;border:1px solid rgba(98,228,255,.45);border-radius:11px;background:linear-gradient(145deg,rgba(30,186,222,.28),rgba(108,70,211,.25));color:#b4f7ff;box-shadow:0 0 24px rgba(43,194,228,.18)}
          .strike-briefing-count{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid rgba(173,146,255,.35);border-radius:999px;background:rgba(107,73,203,.16);color:#d5c7ff;font:600 8px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.08em}
          .strike-briefing-title{margin:0;color:#f5fbff;font:800 clamp(23px,4vw,36px) var(--font-display,'Orbitron'),sans-serif;letter-spacing:.08em;text-shadow:0 0 28px rgba(83,198,255,.22)}
          .strike-briefing-lead{margin:5px 0 0;color:#9bb2cb;font-size:12px}
-         .strike-briefing-layout{display:grid;grid-template-columns:minmax(0,1.22fr) minmax(270px,.78fr);gap:14px;align-items:stretch}
+         .strike-briefing-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(270px,.85fr);gap:16px;align-items:stretch}
          .strike-arena-side{display:grid;gap:10px;align-content:start}
-         .strike-arena-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-         .strike-arena-option{position:relative;display:flex;min-height:86px;flex-direction:column;justify-content:flex-end;overflow:hidden;padding:10px;border:1px solid color-mix(in srgb,var(--arena-accent) 32%,rgba(166,198,226,.25));border-radius:12px;background:radial-gradient(ellipse at 88% 8%,color-mix(in srgb,var(--arena-accent) 42%,transparent),transparent 52%),linear-gradient(145deg,color-mix(in srgb,var(--arena-horizon) 58%,#10182b),rgba(8,15,28,.98));color:#effcff;text-align:left;cursor:pointer;isolation:isolate;transition:transform .2s,border-color .2s,box-shadow .2s}
+         .strike-arena-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+         .strike-arena-option{position:relative;display:flex;min-height:96px;flex-direction:column;justify-content:flex-end;overflow:hidden;padding:12px;border:1px solid color-mix(in srgb,var(--arena-accent) 32%,rgba(166,198,226,.25));border-radius:12px;background:radial-gradient(ellipse at 88% 8%,color-mix(in srgb,var(--arena-accent) 42%,transparent),transparent 52%),linear-gradient(145deg,color-mix(in srgb,var(--arena-horizon) 58%,#10182b),rgba(8,15,28,.98));color:#effcff;text-align:left;cursor:pointer;isolation:isolate;transition:transform .2s,border-color .2s,box-shadow .2s}
          .strike-arena-option:before{position:absolute;z-index:-1;right:-12px;top:-30px;width:78px;height:78px;border:1px solid color-mix(in srgb,var(--arena-accent) 45%,transparent);border-radius:50%;content:"";box-shadow:0 0 0 10px color-mix(in srgb,var(--arena-accent) 9%,transparent),0 0 0 22px color-mix(in srgb,var(--arena-accent) 6%,transparent)}
          .strike-arena-option:hover{transform:translateY(-2px);border-color:var(--arena-accent);box-shadow:0 8px 22px color-mix(in srgb,var(--arena-accent) 16%,transparent)}
          .strike-arena-option[aria-pressed=true]{border-color:var(--arena-accent);background:radial-gradient(ellipse at 86% 12%,color-mix(in srgb,var(--arena-accent) 58%,transparent),transparent 57%),linear-gradient(145deg,color-mix(in srgb,var(--arena-horizon) 75%,#10182b),rgba(8,15,28,.98));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--arena-accent) 44%,transparent),0 0 22px color-mix(in srgb,var(--arena-accent) 24%,transparent)}
@@ -4988,7 +5105,7 @@ const GamePage = () => {
          .strike-arena-description{display:none}
          .strike-arena-showcase{position:relative;min-height:232px;overflow:hidden;border:1px solid color-mix(in srgb,var(--arena-accent) 57%,rgba(157,201,232,.4));border-radius:16px;background:linear-gradient(180deg,var(--arena-horizon),var(--arena-midday) 64%,var(--arena-ground));box-shadow:0 12px 34px rgba(0,0,0,.26),inset 0 0 50px rgba(4,10,26,.28);isolation:isolate;animation:strike-preview-arrive .35s ease-out both}
          @keyframes strike-preview-arrive{from{opacity:.55;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
-         .strike-arena-showcase:before{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(5,13,31,.08),transparent 45%,rgba(7,11,24,.58)),radial-gradient(ellipse at 50% 100%,color-mix(in srgb,var(--arena-accent) 32%,transparent),transparent 67%);content:""}
+         .strike-arena-showcase:before{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(5,13,31,.02),transparent 70%,rgba(7,11,24,.12)),radial-gradient(ellipse at 50% 100%,color-mix(in srgb,var(--arena-accent) 32%,transparent),transparent 67%);content:""}
          .strike-arena-sun{position:absolute;right:13%;top:13%;width:48px;height:48px;border-radius:50%;background:color-mix(in srgb,var(--arena-accent) 78%,white);box-shadow:0 0 25px color-mix(in srgb,var(--arena-accent) 78%,transparent),0 0 70px color-mix(in srgb,var(--arena-accent) 38%,transparent)}
          .strike-arena-ridge{position:absolute;right:-8%;bottom:22%;width:75%;height:44%;border-radius:55% 0 0;background:linear-gradient(140deg,color-mix(in srgb,var(--arena-ground) 60%,#151d35),color-mix(in srgb,var(--arena-horizon) 60%,#10172b));transform:rotate(-8deg)}
          .strike-arena-ridge:before{position:absolute;left:-32%;bottom:-18%;width:72%;height:74%;border-radius:50% 50% 0 0;background:linear-gradient(160deg,color-mix(in srgb,var(--arena-ground) 76%,#18243a),#101729);content:""}
@@ -4999,8 +5116,6 @@ const GamePage = () => {
          .strike-arena-showcase.is-ruins .strike-arena-silhouette i{border-radius:0;background:linear-gradient(90deg,rgba(8,12,23,.9) 22%,color-mix(in srgb,var(--arena-accent) 38%,#10172b) 23% 29%,rgba(8,12,23,.9) 30%);clip-path:polygon(0 13%,15% 13%,15% 0,38% 0,38% 17%,64% 17%,64% 5%,100% 5%,100% 100%,0 100%)}
          .strike-arena-showcase.is-arctic .strike-arena-silhouette i{border-radius:45% 45% 0 0;background:linear-gradient(145deg,#d9f4ff,#587991 70%,#273c50)}
          .strike-arena-showcase.is-jungle .strike-arena-silhouette i{width:clamp(30px,5vw,52px);border:0;border-radius:48% 48% 12% 12%;background:linear-gradient(90deg,#263f31,#9cb85a 52%,#33472c);clip-path:polygon(50% 0,100% 46%,78% 46%,100% 73%,70% 73%,91% 100%,8% 100%,30% 73%,0 73%,24% 46%,0 46%)}
-         .strike-arena-showcase.is-harbor .strike-arena-silhouette i{border-radius:2px;background:repeating-linear-gradient(0deg,rgba(8,14,24,.92) 0 12px,color-mix(in srgb,var(--arena-accent) 45%,#344957) 13px 15px)}
-         .strike-arena-showcase.is-volcano .strike-arena-ridge{background:linear-gradient(145deg,#281f27,#f1572e 42%,#43272a 47%,#141728 78%)}
          .strike-arena-intel-column{display:grid;min-width:0;gap:9px;align-content:start}
          .strike-arena-location{position:absolute;left:15px;top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(255,255,255,.24);border-radius:999px;background:rgba(8,13,26,.48);color:#f7fbff;font:600 8px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.08em;backdrop-filter:blur(8px)}
          .strike-arena-preview-icon{position:absolute;right:17px;bottom:12px;font-size:42px;filter:drop-shadow(0 5px 12px rgba(0,0,0,.45))}
@@ -5021,13 +5136,13 @@ const GamePage = () => {
          .strike-rule:nth-child(4) svg{color:#ff879d}
          .strike-rule:nth-child(5) svg{color:#c3a2ff}
          .strike-rule:nth-child(6) svg{color:#69e8db}
-         .strike-arena-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+         .strike-arena-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:8px;margin-top:10px}
          .strike-arena-actions .strike-phase-button{min-height:46px;margin-top:0;border:1px solid rgba(96,235,255,.7);border-radius:10px;background:linear-gradient(105deg,#087ea0,#4957c9 58%,#853cca);box-shadow:0 8px 22px rgba(41,106,223,.27);font-size:10px}
          .strike-arena-actions .strike-phase-button:hover{filter:brightness(1.16)}
          .strike-arena-actions .strike-phase-button.is-secondary{border-color:rgba(179,197,225,.25);background:rgba(26,35,55,.8);box-shadow:none}
          .strike-phase-button:disabled{opacity:.5;cursor:wait}
-         @media(max-width:740px){.strike-phase-card.is-arena-picker{overflow:auto}.strike-briefing-layout{grid-template-columns:1fr}.strike-arena-showcase{min-height:165px}.strike-arena-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.strike-arena-option{min-height:76px;padding:8px}.strike-rules{padding:10px}}
-         @media(max-width:480px){.strike-briefing-head{margin-bottom:9px}.strike-briefing-emblem{width:29px;height:29px}.strike-briefing-title{font-size:21px}.strike-briefing-lead{font-size:10px}.strike-briefing-count{padding:6px 8px;font-size:7px}.strike-briefing-layout{gap:9px}.strike-arena-grid{gap:6px}.strike-arena-option{min-height:70px;padding:7px}.strike-arena-name{font-size:8px}.strike-arena-subtitle{font-size:8px}.strike-arena-icon{right:7px;top:5px;font-size:17px}.strike-arena-showcase{min-height:132px}.strike-arena-sun{width:34px;height:34px}.strike-arena-preview-icon{font-size:32px}.strike-arena-intel{padding:9px 10px}.strike-arena-intel h3{font-size:12px}.strike-arena-intel p{font-size:10px}.strike-rules-list{grid-template-columns:1fr 1fr;gap:5px}.strike-rule{gap:5px;padding:6px;font-size:9px}.strike-rule svg{width:13px;height:13px}.strike-arena-actions{gap:6px;margin-top:8px}.strike-arena-actions .strike-phase-button{min-height:41px;padding:8px 5px;font-size:8px}}
+         @media(max-width:740px){.strike-phase-card.is-arena-picker{overflow:auto}.strike-briefing-layout{grid-template-columns:1fr}.strike-arena-showcase{min-height:165px}.strike-arena-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.strike-arena-option{min-height:82px;padding:10px}.strike-rules{padding:10px}}
+         @media(max-width:480px){.strike-briefing-head{margin-bottom:9px}.strike-briefing-emblem{width:29px;height:29px}.strike-briefing-title{font-size:21px}.strike-briefing-lead{font-size:10px}.strike-briefing-count{padding:6px 8px;font-size:7px}.strike-briefing-layout{gap:9px}.strike-arena-grid{gap:7px}.strike-arena-option{min-height:74px;padding:8px}.strike-arena-name{font-size:8px}.strike-arena-subtitle{font-size:8px}.strike-arena-icon{right:7px;top:5px;font-size:17px}.strike-arena-showcase{min-height:132px}.strike-arena-sun{width:34px;height:34px}.strike-arena-preview-icon{font-size:32px}.strike-arena-intel{padding:9px 10px}.strike-arena-intel h3{font-size:12px}.strike-arena-intel p{font-size:10px}.strike-rules-list{grid-template-columns:1fr 1fr;gap:5px}.strike-rule{gap:5px;padding:6px;font-size:9px}.strike-rule svg{width:13px;height:13px}.strike-arena-actions{gap:6px;margin-top:8px}.strike-arena-actions .strike-phase-button{min-height:41px;padding:8px 5px;font-size:8px}}
          .strike-phase-kicker{color:#73d9df;font:600 9px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.2em;text-transform:uppercase}
          .strike-phase-title{margin:10px 0 8px;color:#effcff;font:700 clamp(22px,5vw,30px) var(--font-display,'Orbitron'),sans-serif;letter-spacing:.09em}
          .strike-phase-copy{margin:0 auto 20px;max-width:420px;color:#a8c5d0;font-size:14px;line-height:1.6}
@@ -5120,7 +5235,7 @@ const GamePage = () => {
             <button
               className="strike-back"
               onClick={openArenaPicker}
-              disabled={gamePhase !== "combat" && gamePhase !== "paused" && gamePhase !== "gameover" && gamePhase !== "complete"}
+              disabled={gamePhase !== "combat" && gamePhase !== "paused" && gamePhase !== "treasure-complete" && gamePhase !== "gameover" && gamePhase !== "complete"}
               aria-label="Pilih lokasi atau tempat perang"
               title="Pilih lokasi perang"
             >
@@ -5446,12 +5561,17 @@ const GamePage = () => {
               aria-labelledby="strike-arena-title"
               aria-describedby="strike-arena-lead"
             >
+              <button
+                className="strike-arena-menu-button"
+                type="button"
+                onClick={() => navigate("/ruang-untuk-guru/numatik-game")}
+              >KEMBALI KE MENU</button>
               <header className="strike-briefing-head">
                 <div className="strike-briefing-kicker">
                   <span className="strike-briefing-emblem"><Crosshair size={19} /></span>
                   BRIEFING NUMATIK STRIKE
                 </div>
-                <span className="strike-briefing-count"><MapPin size={13} /> 06 MEDAN OPERASI</span>
+                <span className="strike-briefing-count"><MapPin size={13} /> {ARENAS.length} MEDAN OPERASI</span>
               </header>
               <h2 className="strike-briefing-title" id="strike-arena-title">PILIH MEDAN TEMPUR</h2>
               <p className="strike-briefing-lead" id="strike-arena-lead">Pilih lokasi, pelajari taktik, lalu pimpin operasi.</p>
@@ -5534,6 +5654,41 @@ const GamePage = () => {
               <button className="strike-phase-button is-secondary" onClick={openArenaPicker}>PILIH LOKASI PERANG</button>
               <button className="strike-phase-button" onClick={() => resumeGameRef.current?.()}>LANJUT BERMAIN</button>
               <button className="strike-phase-button is-secondary" onClick={() => navigate("/ruang-untuk-guru/numatik-game")}>KEMBALI KE MENU</button>
+            </section>
+          </div>
+        )}
+        {gamePhase === "treasure-complete" && (
+          <div className="strike-phase-layer">
+            <section className="strike-phase-card" role="dialog" aria-modal="true" aria-labelledby="strike-treasure-complete-title">
+              <div className="strike-phase-kicker">Seluruh peti harta karun berhasil dibuka!</div>
+              <h2 className="strike-phase-title" id="strike-treasure-complete-title">SELAMAT!</h2>
+              <p className="strike-phase-copy">
+                {treasureCorrectAnswers === TREASURE_COUNT
+                  ? "Luar biasa! Semua soal dijawab benar pada percobaan pertama."
+                  : "Hebat! Kamu berhasil menyelesaikan seluruh soal harta karun."}
+              </p>
+              <div className="strike-score-summary">
+                <div className="strike-score-cell">
+                  <div className="strike-score-label">SKOR PERTANYAAN</div>
+                  <div className="strike-score-value">{treasureQuizScore} / {TREASURE_COUNT * TREASURE_CORRECT_POINTS}</div>
+                </div>
+                <div className="strike-score-cell">
+                  <div className="strike-score-label">BENAR PERTAMA KALI</div>
+                  <div className="strike-score-value">{treasureCorrectAnswers} / {TREASURE_COUNT}</div>
+                </div>
+                <div className="strike-score-cell">
+                  <div className="strike-score-label">JAWABAN SALAH · {TREASURE_WRONG_POINTS} POIN</div>
+                  <div className="strike-score-value">{treasureWrongAnswers}</div>
+                </div>
+                <div className="strike-score-cell">
+                  <div className="strike-score-label">SKOR TOTAL OPERASI</div>
+                  <div className="strike-score-value">{score}</div>
+                </div>
+              </div>
+              <button className="strike-phase-button" onClick={() => nextWaveRef.current?.()}>
+                {enemyCount === 0 ? "SELESAIKAN MISI" : "LANJUTKAN OPERASI"}
+              </button>
+              <button className="strike-phase-button is-secondary" onClick={openArenaPicker}>PILIH LOKASI</button>
             </section>
           </div>
         )}
