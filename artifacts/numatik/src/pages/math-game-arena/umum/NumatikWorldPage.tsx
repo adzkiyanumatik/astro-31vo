@@ -741,6 +741,9 @@ const AVATAR_PRESETS: readonly AvatarPreset[] = [
 ];
 
 const DEFAULT_AVATAR_PRESET = AVATAR_PRESETS[0]!;
+const AVATAR_PICKER_PRESETS = AVATAR_PRESETS.filter(
+  ({ id }) => !["cewek-streetwear", "cewek-gaul", "petualang-flanel", "chibi-halus", "chibi-kucing"].includes(id),
+);
 type AvatarPresetId = AvatarPreset["id"];
 
 const AVATAR_STORAGE_KEY = "numatik-world-avatar";
@@ -749,11 +752,11 @@ const readSavedAvatar = (): AvatarPresetId => {
   try {
     const savedId = window.localStorage.getItem(AVATAR_STORAGE_KEY);
     const savedPresetEnabled = savedId !== "cewek-halus" || SHOW_TEST_AVATARS;
-    return savedPresetEnabled && AVATAR_PRESETS.some((preset) => preset.id === savedId)
+    return savedPresetEnabled && AVATAR_PICKER_PRESETS.some((preset) => preset.id === savedId)
       ? (savedId as AvatarPresetId)
-      : "anak-cokelat";
+      : DEFAULT_AVATAR_PRESET.id;
   } catch {
-    return "anak-cokelat";
+    return DEFAULT_AVATAR_PRESET.id;
   }
 };
 
@@ -5586,7 +5589,8 @@ const NumatikWorldPage = () => {
         .world-score{font-size:13px;color:#3672cb}
         .world-title{font:900 clamp(16px,2.4vw,25px)/1 var(--font-display,'Orbitron'),sans-serif;letter-spacing:.04em;text-shadow:0 2px 0 #3478c8,0 5px 12px rgba(22,80,138,.3)}
         .world-subtitle{margin-top:5px;font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 5px rgba(20,83,133,.4)}
-        .world-brand-mark{display:grid;place-items:center;width:42px;height:42px;border:2px solid #fff;border-radius:14px;background:linear-gradient(145deg,#49b8f3,#5175e8);box-shadow:0 5px 16px rgba(34,99,137,.18)}
+        .world-brand-mark{display:grid;place-items:center;width:42px;height:42px;overflow:hidden;border:2px solid #fff;border-radius:14px;background:#fff;box-shadow:0 5px 16px rgba(34,99,137,.18)}
+        .world-brand-mark img{width:100%;height:100%;object-fit:cover}
         .world-bottom{position:absolute;left:50%;bottom:clamp(14px,3vh,28px);transform:translateX(-50%);padding:10px 17px;border:1px solid rgba(255,255,255,.86);border-radius:15px;background:rgba(255,255,255,.85);color:#315d87;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 5px 17px rgba(34,99,137,.14);backdrop-filter:blur(8px)}
         .world-bottom kbd{padding:3px 6px;border:1px solid #bedcf0;border-radius:6px;background:#eff9ff;color:#3974c6;font:800 10px var(--font-display,'Orbitron'),sans-serif}
         .world-hud .world-mobile-controls{pointer-events:auto}
@@ -5733,8 +5737,12 @@ const NumatikWorldPage = () => {
           <section className="world-start-screen" aria-labelledby="world-start-title">
             <div className="world-start-content">
               <div className="world-start-top">
-                <button className="world-start-back" onClick={() => navigate("/ruang-untuk-guru/numatik-game")} aria-label="Kembali ke menu Numatik Game">
-                  <ArrowLeft size={15} /> MENU
+                <button
+                  className="world-start-back"
+                  onClick={() => avatarPickerOpen ? navigate("/ruang-untuk-guru/numatik-game") : setAvatarPickerOpen(true)}
+                  aria-label={avatarPickerOpen ? "Kembali ke menu Numatik Game" : "Kembali ke pemilihan avatar"}
+                >
+                  <ArrowLeft size={15} /> {avatarPickerOpen ? "MENU" : "PILIH AVATAR"}
                 </button>
                 <div className="world-start-badge"><Sparkles size={14} /> PETUALANGAN BELAJAR</div>
               </div>
@@ -5746,7 +5754,7 @@ const NumatikWorldPage = () => {
               {avatarPickerOpen ? (
                 <section aria-labelledby="world-avatar-title">
                   <div className="world-avatar-grid">
-                    {AVATAR_PRESETS.filter((preset) => SHOW_TEST_AVATARS || preset.id !== "cewek-halus").map((preset) => (
+                    {AVATAR_PICKER_PRESETS.filter((preset) => SHOW_TEST_AVATARS || preset.id !== "cewek-halus").map((preset) => (
                       <article
                         key={preset.id}
                         className="world-avatar-card"
@@ -5825,10 +5833,10 @@ const NumatikWorldPage = () => {
           <div className="world-hud">
             <header className="world-top">
               <div className="world-brand">
-                <button className="world-back" onClick={() => navigate("/ruang-untuk-guru/numatik-game")} aria-label="Kembali ke menu Numatik Game">
-                  <ArrowLeft size={15} /> MENU
+                <button className="world-back" onClick={restartAdventure} aria-label="Kembali ke pemilihan pulau">
+                  <ArrowLeft size={15} /> PILIH PULAU
                 </button>
-                <div className="world-brand-mark"><Sparkles size={21} /></div>
+                <div className="world-brand-mark"><img src="/logo-numatik.png" alt="Logo Numatik" /></div>
                 <div>
                   <div className="world-title">NUMATIK WORLD</div>
                   <div className="world-subtitle">{ISLANDS.find(({ id }) => id === selectedIsland)?.emoji} {ISLANDS.find(({ id }) => id === selectedIsland)?.name} · cari {TREASURE_COUNT} harta karun!</div>

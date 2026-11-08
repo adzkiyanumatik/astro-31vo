@@ -17,41 +17,27 @@ const Tag = ({ label, color }: { label: string; color: string }) => (
 const NumBadge = ({ n, color }: { n: string; color: string }) => (
   <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold shrink-0 font-body ${color}`}>{n}</span>
 );
+const letterLabel = (index: number) => {
+  let label = "";
+  let current = index;
+  while (current >= 0) {
+    label = String.fromCharCode((current % 26) + 97) + label;
+    current = Math.floor(current / 26) - 1;
+  }
+  return label;
+};
 
 const PFX = "practice.plsvPtlsv.modelMatematikaPtLSV";
 
 /* ── Soal A: Membuat Model Pertidaksamaan ─────────────── */
-const SoalA = () => {
+const SoalA = ({ startIndex }: { startIndex: number }) => {
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <p className="font-body text-sm text-white/90 leading-relaxed">
-        <Trans
-          i18nKey={`${PFX}.qA.instruction`}
-          components={{ a: <span className="text-orange-300 font-semibold" /> }}
-        />
-      </p>
-
-      {/* Soal 1 */}
-      <div className="bg-orange-500/5 border border-orange-500/15 rounded-xl px-4 py-3">
-        <div className="flex items-start gap-2.5">
-          <NumBadge n="1" color="bg-orange-500/30 text-orange-200 border border-orange-400/40" />
-          <p className="font-body text-sm text-white/85 leading-relaxed">
-            <Trans
-              i18nKey={`${PFX}.q1.text`}
-              components={{ a: <span className="text-orange-300 font-semibold" /> }}
-            />{" "}
-            <span className="text-white/50 italic">
-              {t(`${PFX}.q1.hintPre`)}<M math="n" />{t(`${PFX}.q1.hintPost`)}
-            </span>
-          </p>
-        </div>
-      </div>
-
       {/* Soal 2 */}
       <div className="bg-orange-500/5 border border-orange-500/15 rounded-xl px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <NumBadge n="2" color="bg-orange-500/30 text-orange-200 border border-orange-400/40" />
+          <NumBadge n={letterLabel(startIndex)} color="bg-orange-500/30 text-orange-200 border border-orange-400/40" />
           <p className="font-body text-sm text-white/85 leading-relaxed">
             <Trans
               i18nKey={`${PFX}.q2.text`}
@@ -67,7 +53,7 @@ const SoalA = () => {
       {/* Soal 3 */}
       <div className="bg-orange-500/5 border border-orange-500/15 rounded-xl px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <NumBadge n="3" color="bg-orange-500/30 text-orange-200 border border-orange-400/40" />
+          <NumBadge n={letterLabel(startIndex + 1)} color="bg-orange-500/30 text-orange-200 border border-orange-400/40" />
           <p className="font-body text-sm text-white/85 leading-relaxed">
             <Trans
               i18nKey={`${PFX}.q3.text`}
@@ -83,7 +69,7 @@ const SoalA = () => {
       {/* Soal 4 */}
       <div className="bg-orange-500/5 border border-orange-500/15 rounded-xl px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <NumBadge n="4" color="bg-orange-500/30 text-orange-200 border border-orange-400/40" />
+          <NumBadge n={letterLabel(startIndex + 2)} color="bg-orange-500/30 text-orange-200 border border-orange-400/40" />
           <p className="font-body text-sm text-white/85 leading-relaxed">
             <Trans
               i18nKey={`${PFX}.q4.text`}
@@ -96,80 +82,19 @@ const SoalA = () => {
         </div>
       </div>
 
-      {/* Soal 5 */}
-      <div className="bg-orange-500/5 border border-orange-500/15 rounded-xl px-4 py-3">
-        <div className="flex items-start gap-2.5">
-          <NumBadge n="5" color="bg-orange-500/30 text-orange-200 border border-orange-400/40" />
-          <p className="font-body text-sm text-white/85 leading-relaxed">
-            <Trans
-              i18nKey={`${PFX}.q5.text`}
-              components={{ a: <span className="text-orange-300 font-semibold" /> }}
-            />{" "}
-            <span className="text-white/50 italic">
-              {t(`${PFX}.q5.hintPre`)}<M math="n" />{t(`${PFX}.q5.hintPost`)}
-            </span>
-          </p>
-        </div>
-      </div>
     </div>
   );
 };
 
 /* ── Soal B: Penerapan Lengkap ────────────────────────── */
-const SoalB = () => {
+const SoalB = ({ startIndex }: { startIndex: number }) => {
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <p className="font-body text-sm text-white/90 leading-relaxed">
-        <Trans
-          i18nKey={`${PFX}.qB.instruction`}
-          components={{ a: <span className="text-amber-300 font-semibold" /> }}
-        />
-      </p>
-
-      {/* Soal 6 */}
-      <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3">
-        <div className="flex items-start gap-2.5">
-          <NumBadge n="6" color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
-          <p className="font-body text-sm text-white/85 leading-relaxed">
-            <Trans
-              i18nKey={`${PFX}.q6.text`}
-              components={{ a: <span className="text-amber-300 font-semibold" /> }}
-            />
-          </p>
-        </div>
-      </div>
-
-      {/* Soal 7 */}
-      <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3">
-        <div className="flex items-start gap-2.5">
-          <NumBadge n="7" color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
-          <p className="font-body text-sm text-white/85 leading-relaxed">
-            <Trans
-              i18nKey={`${PFX}.q7.text`}
-              components={{ a: <span className="text-amber-300 font-semibold" /> }}
-            />
-          </p>
-        </div>
-      </div>
-
-      {/* Soal 8 */}
-      <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3">
-        <div className="flex items-start gap-2.5">
-          <NumBadge n="8" color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
-          <p className="font-body text-sm text-white/85 leading-relaxed">
-            <Trans
-              i18nKey={`${PFX}.q8.text`}
-              components={{ a: <span className="text-amber-300 font-semibold" /> }}
-            />
-          </p>
-        </div>
-      </div>
-
       {/* Soal 9 */}
       <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <NumBadge n="9" color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
+          <NumBadge n={letterLabel(startIndex)} color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
           <p className="font-body text-sm text-white/85 leading-relaxed">
             <Trans
               i18nKey={`${PFX}.q9.text`}
@@ -182,7 +107,7 @@ const SoalB = () => {
       {/* Soal 10 */}
       <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <NumBadge n="10" color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
+          <NumBadge n={letterLabel(startIndex + 1)} color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
           <p className="font-body text-sm text-white/85 leading-relaxed">
             <Trans
               i18nKey={`${PFX}.q10.text`}
@@ -195,7 +120,7 @@ const SoalB = () => {
       {/* Soal 11 */}
       <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3 space-y-2">
         <div className="flex items-start gap-2.5">
-          <NumBadge n="11" color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
+          <NumBadge n={letterLabel(startIndex + 2)} color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
           <div className="space-y-2">
             <p className="font-body text-sm text-white/85 leading-relaxed">
               <Trans
@@ -225,7 +150,7 @@ const SoalB = () => {
       {/* Soal 12 */}
       <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <NumBadge n="12" color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
+          <NumBadge n={letterLabel(startIndex + 3)} color="bg-amber-500/25 text-amber-200 border border-amber-400/40" />
           <p className="font-body text-sm text-white/85 leading-relaxed">
             <Trans
               i18nKey={`${PFX}.q12.text`}
@@ -239,24 +164,17 @@ const SoalB = () => {
 };
 
 /* ── Soal C: Model & Penerapan Lanjutan ───────────────── */
-const SoalC = () => {
+const SoalC = ({ part, startIndex }: { part: "model" | "application"; startIndex: number }) => {
   const { t } = useTranslation();
   return (
     <div className="space-y-5">
-
-      {/* Sub-bagian: Buat model pertidaksamaan */}
+      {part === "model" && (
       <div className="space-y-4">
-        <p className="font-body text-sm text-white/90 leading-relaxed">
-          <Trans
-            i18nKey={`${PFX}.qC.instruction1`}
-            components={{ a: <span className="text-yellow-300 font-semibold" /> }}
-          />
-        </p>
 
         {/* Soal 13 */}
         <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3">
           <div className="flex items-start gap-2.5">
-            <NumBadge n="13" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
+            <NumBadge n={letterLabel(startIndex)} color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
             <p className="font-body text-sm text-white/85 leading-relaxed">
               <Trans
                 i18nKey={`${PFX}.q13.text`}
@@ -272,7 +190,7 @@ const SoalC = () => {
         {/* Soal 14 */}
         <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3">
           <div className="flex items-start gap-2.5">
-            <NumBadge n="14" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
+            <NumBadge n={letterLabel(startIndex + 1)} color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
             <p className="font-body text-sm text-white/85 leading-relaxed">
               <Trans
                 i18nKey={`${PFX}.q14.text`}
@@ -285,26 +203,10 @@ const SoalC = () => {
           </div>
         </div>
 
-        {/* Soal 15 */}
-        <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3">
-          <div className="flex items-start gap-2.5">
-            <NumBadge n="15" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
-            <p className="font-body text-sm text-white/85 leading-relaxed">
-              <Trans
-                i18nKey={`${PFX}.q15.text`}
-                components={{ a: <span className="text-yellow-300 font-semibold" /> }}
-              />{" "}
-              <span className="text-white/50 italic">
-                {t(`${PFX}.q15.hintPre`)}<M math="m" />{t(`${PFX}.q15.hintPost`)}
-              </span>
-            </p>
-          </div>
-        </div>
-
         {/* Soal 16 */}
         <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3">
           <div className="flex items-start gap-2.5">
-            <NumBadge n="16" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
+            <NumBadge n={letterLabel(startIndex + 2)} color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
             <p className="font-body text-sm text-white/85 leading-relaxed">
               <Trans
                 i18nKey={`${PFX}.q16.text`}
@@ -317,37 +219,16 @@ const SoalC = () => {
           </div>
         </div>
 
-        {/* Soal 17 */}
-        <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3">
-          <div className="flex items-start gap-2.5">
-            <NumBadge n="17" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
-            <p className="font-body text-sm text-white/85 leading-relaxed">
-              <Trans
-                i18nKey={`${PFX}.q17.text`}
-                components={{ a: <span className="text-yellow-300 font-semibold" /> }}
-              />{" "}
-              <span className="text-white/50 italic">
-                {t(`${PFX}.q17.hintPre`)}<M math="w" />{t(`${PFX}.q17.hintPost`)}
-              </span>
-            </p>
-          </div>
-        </div>
       </div>
+      )}
 
-      {/* Divider */}
-      <div className="border-t border-yellow-500/15 pt-4">
-        <p className="font-body text-sm text-white/90 leading-relaxed mb-4">
-          <Trans
-            i18nKey={`${PFX}.qC.instruction2`}
-            components={{ a: <span className="text-yellow-300 font-semibold" /> }}
-          />
-        </p>
-
+      {part === "application" && (
+      <div className="space-y-4">
         <div className="space-y-4">
           {/* Soal 18 */}
           <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3 space-y-2">
             <div className="flex items-start gap-2.5">
-              <NumBadge n="18" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
+              <NumBadge n={letterLabel(startIndex)} color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
               <div className="space-y-2">
                 <p className="font-body text-sm text-white/85 leading-relaxed">
                   <Trans
@@ -372,57 +253,10 @@ const SoalC = () => {
             </div>
           </div>
 
-          {/* Soal 19 */}
-          <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3 space-y-2">
-            <div className="flex items-start gap-2.5">
-              <NumBadge n="19" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
-              <div className="space-y-2">
-                <p className="font-body text-sm text-white/85 leading-relaxed">
-                  <Trans
-                    i18nKey={`${PFX}.q19.text`}
-                    components={{
-                      a: <span className="text-yellow-300 font-semibold" />,
-                      m1: <M math="(2x + 5)" />,
-                      m2: <M math="(x + 1)" />,
-                    }}
-                  />
-                </p>
-                {[
-                  { l: "a", tk: `${PFX}.q19.subA` },
-                  { l: "b", tk: `${PFX}.q19.subB` },
-                ].map(({ l, tk }) => (
-                  <div key={l} className="flex items-start gap-2 bg-yellow-500/10 border border-yellow-400/20 rounded-lg px-3 py-2">
-                    <span className="text-yellow-400 font-bold text-xs mt-0.5 shrink-0">{l}.</span>
-                    <span className="font-body text-xs text-white/70 leading-relaxed">{t(tk)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Soal 20 */}
-          <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3">
-            <div className="flex items-start gap-2.5">
-              <NumBadge n="20" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
-              <p className="font-body text-sm text-white/85 leading-relaxed">
-                <Trans
-                  i18nKey={`${PFX}.q20.text`}
-                  components={{
-                    a1: <span className="text-yellow-300 font-semibold" />,
-                    a2: <span className="text-yellow-300 font-semibold" />,
-                    m1: <M math="(4t + 1)" />,
-                    m2: <M math="(t + 6)" />,
-                    m3: <M math="t" />,
-                  }}
-                />
-              </p>
-            </div>
-          </div>
-
           {/* Soal 21 */}
           <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3">
             <div className="flex items-start gap-2.5">
-              <NumBadge n="21" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
+              <NumBadge n={letterLabel(startIndex + 1)} color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
               <p className="font-body text-sm text-white/85 leading-relaxed">
                 <Trans
                   i18nKey={`${PFX}.q21.text`}
@@ -432,24 +266,9 @@ const SoalC = () => {
             </div>
           </div>
 
-          {/* Soal 22 */}
-          <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-xl px-4 py-3">
-            <div className="flex items-start gap-2.5">
-              <NumBadge n="22" color="bg-yellow-500/25 text-yellow-200 border border-yellow-400/40" />
-              <p className="font-body text-sm text-white/85 leading-relaxed">
-                <Trans
-                  i18nKey={`${PFX}.q22.text`}
-                  components={{
-                    a: <span className="text-yellow-300 font-semibold" />,
-                    m1: <M math="y" />,
-                    m2: <M math="y" />,
-                  }}
-                />
-              </p>
-            </div>
-          </div>
         </div>
       </div>
+      )}
     </div>
   );
 };
@@ -466,21 +285,36 @@ const ModelMatematikaPtLSVPage = () => {
       tagColor: "bg-orange-500/20 text-orange-300 border-orange-400/40",
       gradient: "from-orange-900/50 to-amber-900/30", border: "border-orange-500/25",
       bar: "from-orange-400 to-amber-500", numBg: "bg-orange-500/30 text-orange-200",
-      custom: <SoalA />,
+      custom: (
+        <div className="space-y-4">
+          <p className="font-body text-sm text-white/90 leading-relaxed">
+            <Trans
+              i18nKey={`${PFX}.qA.instruction`}
+              components={{ a: <span className="text-orange-300 font-semibold" /> }}
+            />
+          </p>
+          <SoalA startIndex={0} />
+          <SoalC part="model" startIndex={3} />
+        </div>
+      ),
     },
     {
       num: 2, tag: t(`${PFX}.tags.soalB`),
       tagColor: "bg-amber-500/20 text-amber-300 border-amber-400/40",
       gradient: "from-amber-900/50 to-yellow-900/30", border: "border-amber-500/25",
       bar: "from-amber-400 to-yellow-500", numBg: "bg-amber-500/30 text-amber-200",
-      custom: <SoalB />,
-    },
-    {
-      num: 3, tag: t(`${PFX}.tags.soalC`),
-      tagColor: "bg-yellow-500/20 text-yellow-300 border-yellow-400/40",
-      gradient: "from-yellow-900/50 to-lime-900/30", border: "border-yellow-500/25",
-      bar: "from-yellow-400 to-lime-500", numBg: "bg-yellow-500/30 text-yellow-200",
-      custom: <SoalC />,
+      custom: (
+        <div className="space-y-4">
+          <p className="font-body text-sm text-white/90 leading-relaxed">
+            <Trans
+              i18nKey={`${PFX}.qB.instruction`}
+              components={{ a: <span className="text-amber-300 font-semibold" /> }}
+            />
+          </p>
+          <SoalB startIndex={0} />
+          <SoalC part="application" startIndex={4} />
+        </div>
+      ),
     },
   ];
 

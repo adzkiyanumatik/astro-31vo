@@ -29,6 +29,25 @@ const DashedLine = ({ color = "border-red-400/20" }: { color?: string }) => (
 /* ══════════════════════════════════════════════════════════
    SOAL 1 – Mudah: Baca simbol ketidaksamaan
 ══════════════════════════════════════════════════════════ */
+const NumberLineExample = () => (
+  <svg
+    role="img"
+    aria-label="Daerah penyelesaian x kurang dari 5, diarsir ke kiri dari lingkaran terbuka di 5"
+    viewBox="0 0 180 52"
+    className="w-40 h-12"
+  >
+    <line x1="20" y1="20" x2="98" y2="20" stroke="#fb7185" strokeWidth="6" />
+    <polygon points="12,20 24,13 24,27" fill="#fb7185" />
+    <line x1="110" y1="20" x2="160" y2="20" stroke="#ffffff80" strokeWidth="1.5" />
+    {[43, 79, 103, 127].map((x) => (
+      <line key={x} x1={x} y1="16" x2={x} y2="24" stroke="#ffffff80" strokeWidth="1" />
+    ))}
+    <circle cx="103" cy="20" r="5" fill="none" stroke="#fb7185" strokeWidth="2" />
+    <circle cx="79" cy="20" r="3.5" fill="#facc15" />
+    <text x="103" y="39" textAnchor="middle" fill="#ffffffb3" fontSize="10">5</text>
+  </svg>
+);
+
 const Soal1 = () => {
   const { t } = useTranslation();
   return (
@@ -45,24 +64,37 @@ const Soal1 = () => {
             <tr className="bg-red-500/20">
               <th className="px-3 py-2 text-red-300 font-bold text-left">{t('practice.plsvPtlsv.pengertianPtLSV.q1.thSimbol')}</th>
               <th className="px-3 py-2 text-red-300 font-bold text-left">{t('practice.plsvPtlsv.pengertianPtLSV.q1.thDibaca')}</th>
-              <th className="px-3 py-2 text-red-300 font-bold text-left">{t('practice.plsvPtlsv.pengertianPtLSV.q1.thContoh')}</th>
+              <th className="min-w-[180px] px-3 py-2 text-red-300 font-bold text-center text-[10px] leading-tight">
+                Daerah Penyelesaian dalam garis bilangan
+              </th>
             </tr>
           </thead>
           <tbody>
             {[
-              { simbol: "x < 5" },
-              { simbol: "x > -2" },
-              { simbol: "x \\leq 8" },
-              { simbol: "x \\geq 1" },
-              { simbol: "-3 < x < 7" },
+              { label: "a", simbol: "x < 5" },
+              { label: "b", simbol: "x > -2" },
+              { label: "c", simbol: "x \\leq 8" },
+              { label: "d", simbol: "x \\geq 1" },
+              { label: "e", simbol: "-3 < x < 7" },
             ].map((r, i) => (
               <tr key={i} className={i % 2 === 0 ? "bg-red-500/5" : "bg-transparent"}>
-                <td className="px-3 py-2.5 text-white/90 font-mono"><M math={r.simbol} /></td>
+                <td className="px-3 py-2.5 text-white/90 font-mono">
+                  <div className="flex items-center gap-2">
+                    <SubLabel letter={r.label} color="bg-red-500/20 text-red-300 border border-red-400/30" />
+                    <M math={r.simbol} />
+                  </div>
+                </td>
                 <td className="px-3 py-2.5">
                   <div className="h-5 border-b border-dashed border-red-400/25 min-w-[140px]" />
                 </td>
                 <td className="px-3 py-2.5">
-                  <div className="h-5 border-b border-dashed border-red-400/25 min-w-[80px]" />
+                  {r.label === "a" ? (
+                    <div className="text-white/85">
+                      <NumberLineExample />
+                    </div>
+                  ) : (
+                    <div className="h-5 border-b border-dashed border-red-400/25 min-w-[80px]" />
+                  )}
                 </td>
               </tr>
             ))}
@@ -468,67 +500,25 @@ const PengertianPtLSVPage = () => {
       custom: <Soal1 />,
     },
     {
-      num: 2, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.mudah'), tagColor: "bg-rose-500/20 text-rose-300 border-rose-400/40",
-      gradient: "from-rose-900/45 to-red-900/30", border: "border-rose-500/25",
-      bar: "from-rose-400 to-pink-500", numBg: "bg-rose-500/30 text-rose-200",
-      subtitle: t('practice.plsvPtlsv.pengertianPtLSV.tags.c2'),
-      custom: <Soal2 />,
-    },
-    {
-      num: 3, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.mudah'), tagColor: "bg-amber-500/20 text-amber-300 border-amber-400/40",
+      num: 2, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.mudah'), tagColor: "bg-amber-500/20 text-amber-300 border-amber-400/40",
       gradient: "from-amber-900/50 to-yellow-900/30", border: "border-amber-500/25",
       bar: "from-amber-400 to-yellow-500", numBg: "bg-amber-500/30 text-amber-200",
       subtitle: t('practice.plsvPtlsv.pengertianPtLSV.tags.c3'),
       custom: <Soal3 />,
     },
     {
-      num: 4, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.mudah'), tagColor: "bg-orange-500/20 text-orange-300 border-orange-400/40",
+      num: 3, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.mudah'), tagColor: "bg-orange-500/20 text-orange-300 border-orange-400/40",
       gradient: "from-orange-900/50 to-amber-900/30", border: "border-orange-500/25",
       bar: "from-orange-400 to-amber-500", numBg: "bg-orange-500/30 text-orange-200",
       subtitle: t('practice.plsvPtlsv.pengertianPtLSV.tags.c4'),
       custom: <Soal4 />,
     },
     {
-      num: 5, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.mudah'), tagColor: "bg-yellow-500/20 text-yellow-300 border-yellow-400/40",
-      gradient: "from-yellow-900/45 to-lime-900/30", border: "border-yellow-500/25",
-      bar: "from-yellow-400 to-lime-500", numBg: "bg-yellow-500/30 text-yellow-200",
-      subtitle: t('practice.plsvPtlsv.pengertianPtLSV.tags.c5'),
-      custom: <Soal5 />,
-    },
-    {
-      num: 6, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.sedang'), tagColor: "bg-teal-500/20 text-teal-300 border-teal-400/40",
+      num: 4, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.sedang'), tagColor: "bg-teal-500/20 text-teal-300 border-teal-400/40",
       gradient: "from-teal-900/50 to-cyan-900/30", border: "border-teal-500/25",
       bar: "from-teal-400 to-cyan-500", numBg: "bg-teal-500/30 text-teal-200",
       subtitle: t('practice.plsvPtlsv.pengertianPtLSV.tags.c6'),
       custom: <Soal6 />,
-    },
-    {
-      num: 7, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.sedang'), tagColor: "bg-purple-500/20 text-purple-300 border-purple-400/40",
-      gradient: "from-purple-900/50 to-indigo-900/30", border: "border-purple-500/25",
-      bar: "from-purple-400 to-indigo-500", numBg: "bg-purple-500/30 text-purple-200",
-      subtitle: t('practice.plsvPtlsv.pengertianPtLSV.tags.c7'),
-      custom: <Soal7 />,
-    },
-    {
-      num: 8, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.sedang'), tagColor: "bg-sky-500/20 text-sky-300 border-sky-400/40",
-      gradient: "from-sky-900/50 to-blue-900/30", border: "border-sky-500/25",
-      bar: "from-sky-400 to-blue-500", numBg: "bg-sky-500/30 text-sky-200",
-      subtitle: t('practice.plsvPtlsv.pengertianPtLSV.tags.c8'),
-      custom: <Soal8 />,
-    },
-    {
-      num: 9, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.sedang'), tagColor: "bg-lime-500/20 text-lime-300 border-lime-400/40",
-      gradient: "from-lime-900/50 to-green-900/30", border: "border-lime-500/25",
-      bar: "from-lime-400 to-green-500", numBg: "bg-lime-500/30 text-lime-200",
-      subtitle: t('practice.plsvPtlsv.pengertianPtLSV.tags.c9'),
-      custom: <Soal9 />,
-    },
-    {
-      num: 10, tag: t('practice.plsvPtlsv.pengertianPtLSV.tags.sulit'), tagColor: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/40",
-      gradient: "from-fuchsia-900/50 to-pink-900/30", border: "border-fuchsia-500/25",
-      bar: "from-fuchsia-400 to-pink-500", numBg: "bg-fuchsia-500/30 text-fuchsia-200",
-      subtitle: t('practice.plsvPtlsv.pengertianPtLSV.tags.c10'),
-      custom: <Soal13 />,
     },
   ];
 
