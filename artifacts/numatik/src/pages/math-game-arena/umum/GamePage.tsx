@@ -1203,42 +1203,26 @@ const GamePage = () => {
     addBox(9, 0.7, 9, bunkerMat, 37, 19, -24);
     addBox(4.8, 3.2, 4.8, towerMat, 37, 17, -24);
     const towerPlatformTop = towerPlatform.y + towerPlatform.height / 2;
-    const towerStairWidth = 3;
-    const towerRampStart = { x: towerPlatform.x, z: 10 };
-    const towerRampEnd = {
-      x: towerPlatform.x,
-      z: towerPlatform.z + towerPlatform.depth / 2,
-    };
-    const towerRampDx = towerRampEnd.x - towerRampStart.x;
-    const towerRampDz = towerRampEnd.z - towerRampStart.z;
-    const towerRampHorizontalLength = Math.hypot(towerRampDx, towerRampDz);
-    const towerRampSlopeLength = Math.hypot(towerRampHorizontalLength, towerPlatformTop);
-    const towerRampIncline = Math.atan2(towerPlatformTop, towerRampHorizontalLength);
-    const towerStairStepCount = 20;
-    const towerRampMidpoint = {
-      x: (towerRampStart.x + towerRampEnd.x) / 2,
-      z: (towerRampStart.z + towerRampEnd.z) / 2,
-    };
-    const towerRampStepSpecs: BoxInstanceSpec[] = Array.from({ length: towerStairStepCount }, (_, index) => {
-      const progress = (index + 0.5) / towerStairStepCount;
-      const stepHeight = progress * towerPlatformTop;
-      return {
-        x: towerRampStart.x + towerRampDx * progress,
-        y: stepHeight - 0.045,
-        z: towerRampStart.z + towerRampDz * progress,
-        w: towerStairWidth,
-        h: 0.09,
-        d: towerRampHorizontalLength / towerStairStepCount * 0.9,
-      };
-    });
-    const lowQualityStairIndices = [0, 3, 5, 7, 10, 12, 16, 19];
-    const mediumQualityStairIndices = [2, 9, 14, 17];
-    const selectedStairIndices = new Set([...lowQualityStairIndices, ...mediumQualityStairIndices]);
-    const towerRampStepSpecsByQuality = [
-      ...lowQualityStairIndices.map((index) => towerRampStepSpecs[index]),
-      ...mediumQualityStairIndices.map((index) => towerRampStepSpecs[index]),
-      ...towerRampStepSpecs.filter((_, index) => !selectedStairIndices.has(index)),
-    ];
+    const towerLadderWidth = 1.6;
+    const towerLadderX = towerPlatform.x;
+    const towerLadderRailZ = towerPlatform.z + towerPlatform.depth / 2 + 0.06;
+    const towerLadderAccessZ = towerLadderRailZ + 1.05;
+    const towerLadderRailSpecs: BoxInstanceSpec[] = [-1, 1].map((side) => ({
+      x: towerLadderX + side * (towerLadderWidth / 2),
+      y: towerPlatformTop / 2,
+      z: towerLadderRailZ,
+      w: 0.14,
+      h: towerPlatformTop,
+      d: 0.14,
+    }));
+    const towerLadderRungSpecs: BoxInstanceSpec[] = Array.from({ length: 20 }, (_, index) => ({
+      x: towerLadderX,
+      y: ((index + 1) / 21) * towerPlatformTop,
+      z: towerLadderRailZ - 0.04,
+      w: towerLadderWidth,
+      h: 0.1,
+      d: 0.12,
+    }));
 
     const soldierSpawns: Array<[number, number]> = [
       // Bunker: ruang barat dan ceruk belakang.
@@ -1294,18 +1278,7 @@ const GamePage = () => {
     dustField.frustumCulled = false;
     scene.add(dustField);
     const reservedDecorations: Array<{ x: number; z: number; width: number; depth: number }> = [];
-    const towerRampClearanceHalfWidth = towerStairWidth / 2 + 3;
-    const distanceToTowerRamp = (x: number, z: number) => {
-      const lengthSquared = towerRampHorizontalLength * towerRampHorizontalLength;
-      const progress = THREE.MathUtils.clamp(
-        ((x - towerRampStart.x) * towerRampDx + (z - towerRampStart.z) * towerRampDz) / lengthSquared,
-        0,
-        1,
-      );
-      const nearestX = towerRampStart.x + towerRampDx * progress;
-      const nearestZ = towerRampStart.z + towerRampDz * progress;
-      return Math.hypot(x - nearestX, z - nearestZ);
-    };
+    const towerLadderClearance = towerLadderWidth / 2 + 1.5;
     const findDecorationPosition = (width: number, depth: number) => {
       for (let attempt = 0; attempt < 1200; attempt += 1) {
         const side = sceneryRandom() < 0.5 ? -1 : 1;
@@ -1314,7 +1287,7 @@ const GamePage = () => {
         if (Math.abs(x) < 23 || z < -35 || z > 43) continue;
         if (x * x + (z - 51) * (z - 51) < 15 * 15) continue;
         if (soldierSpawns.some(([spawnX, spawnZ]) => Math.hypot(x - spawnX, z - spawnZ) < 11)) continue;
-        if (distanceToTowerRamp(x, z) <= towerRampClearanceHalfWidth + Math.hypot(width * 0.56, depth * 0.56)) continue;
+        if (Math.hypot(x - towerLadderX, z - towerLadderAccessZ) <= towerLadderClearance + Math.hypot(width * 0.56, depth * 0.56)) continue;
         const overlapsExisting = solidObstacles.some((obstacle) => (
           Math.abs(x - obstacle.x) < width / 2 + obstacle.width / 2 + 0.7
           && Math.abs(z - obstacle.z) < depth / 2 + obstacle.depth / 2 + 0.7
@@ -1402,21 +1375,11 @@ const GamePage = () => {
       tierCounts(12, 12, 12),
     );
 
-    const towerStairRailOffset = towerStairWidth / 2 + 0.08;
-    const towerStairRailSpecs: BoxInstanceSpec[] = [-1, 1].map((side) => ({
-      x: towerRampMidpoint.x + side * towerStairRailOffset,
-      y: towerPlatformTop / 2,
-      z: towerRampMidpoint.z,
-      w: 0.12,
-      h: 0.12,
-      d: towerRampSlopeLength,
-      rotX: Math.PI + towerRampIncline,
-    }));
     const towerPlatformSouthRailZ = towerPlatform.z + towerPlatform.depth / 2 + 0.2;
     const towerPlatformSouthRailStartX = towerPlatform.x - 6;
     const towerPlatformSouthRailEndX = towerPlatform.x + 6;
-    const towerPlatformOpeningStartX = towerRampEnd.x - towerStairWidth / 2;
-    const towerPlatformOpeningEndX = towerRampEnd.x + towerStairWidth / 2;
+    const towerPlatformOpeningStartX = towerLadderX - towerLadderWidth / 2 - 0.7;
+    const towerPlatformOpeningEndX = towerLadderX + towerLadderWidth / 2 + 0.7;
     const towerPlatformSouthRailSpecs: BoxInstanceSpec[] = [
       {
         x: (towerPlatformSouthRailStartX + towerPlatformOpeningStartX) / 2,
@@ -1442,8 +1405,8 @@ const GamePage = () => {
       { x: 43.3, y: 15.8, z: -24, w: 0.18, h: 0.2, d: 12 },
     ];
     const towerDetailSpecs: BoxInstanceSpec[] = [
-      ...towerRampStepSpecsByQuality,
-      ...towerStairRailSpecs,
+      ...towerLadderRailSpecs,
+      ...towerLadderRungSpecs,
       ...towerPlatformRailSpecs,
       { x: 34.2, y: 8.5, z: -28.1, w: 0.16, h: 13.2, d: 0.16, rotZ: 0.22 },
       { x: 39.8, y: 8.5, z: -28.1, w: 0.16, h: 13.2, d: 0.16, rotZ: -0.22 },
@@ -2055,6 +2018,7 @@ const GamePage = () => {
     let turnAroundStartedAt = 0;
     let verticalVelocity = 0;
     let playerGrounded = true;
+    let playerOnTowerLadder = false;
     let frame = 0;
     let lastRenderAt = 0;
     let activeDecorationQuality = qualityRef.current;
@@ -2081,12 +2045,6 @@ const GamePage = () => {
     const playerLimit = 55;
     const worldCollisionRadius = 0.48;
     const playerOnlyTowerRailColliders: CollisionBox[] = [
-      ...towerStairRailSpecs.map((rail) => ({
-        x: rail.x,
-        z: rail.z,
-        width: rail.w,
-        depth: towerRampHorizontalLength,
-      })),
       ...towerPlatformRailSpecs.map((rail) => ({
         x: rail.x,
         z: rail.z,
@@ -2095,23 +2053,7 @@ const GamePage = () => {
       })),
     ];
     const playerCollisionObstacles = [...solidObstacles, ...playerOnlyTowerRailColliders];
-    const towerRampHalfWidth = towerStairWidth / 2;
-    const getTowerRampProgress = (x: number, z: number) => {
-      const lengthSquared = towerRampHorizontalLength * towerRampHorizontalLength;
-      const progress = THREE.MathUtils.clamp(
-        ((x - towerRampStart.x) * towerRampDx + (z - towerRampStart.z) * towerRampDz) / lengthSquared,
-        0,
-        1,
-      );
-      const nearestX = towerRampStart.x + towerRampDx * progress;
-      const nearestZ = towerRampStart.z + towerRampDz * progress;
-      const distanceSquared = (x - nearestX) ** 2 + (z - nearestZ) ** 2;
-      return distanceSquared <= towerRampHalfWidth * towerRampHalfWidth ? progress : null;
-    };
-    const isWithinTowerRamp = (x: number, z: number) => getTowerRampProgress(x, z) !== null;
     const getGroundHeight = (x: number, z: number) => {
-      const rampProgress = getTowerRampProgress(x, z);
-      if (rampProgress !== null) return rampProgress * towerPlatformTop;
       const insideTowerPlatform = (
         Math.abs(x - towerPlatform.x) <= towerPlatform.width / 2
         && Math.abs(z - towerPlatform.z) <= towerPlatform.depth / 2
@@ -3754,6 +3696,7 @@ const GamePage = () => {
       pitch = 0;
       verticalVelocity = 0;
       playerGrounded = true;
+      playerOnTowerLadder = false;
       player.position.set(0, 1.65, 51);
       player.rotation.set(0, 0, 0);
       camera.rotation.set(0, 0, 0);
@@ -4016,7 +3959,43 @@ const GamePage = () => {
       const inputY = (keysNow.KeyW || keysNow.ArrowUp ? 1 : 0) - (keysNow.KeyS || keysNow.ArrowDown ? 1 : 0) + moveInput.current.y;
       const length = Math.hypot(inputX, inputY);
       const sprintActive = sprintingRef.current || keysNow.ShiftLeft || keysNow.ShiftRight;
-      if (length > 0) {
+      const nearTowerLadder = (
+        Math.abs(player.position.x - towerLadderX) <= 1.2
+        && Math.abs(player.position.z - towerLadderRailZ) <= 1.65
+      );
+      if (
+        !playerOnTowerLadder
+        && playerGrounded
+        && nearTowerLadder
+        && (
+          (inputY > 0.1 && player.position.y <= 2.2 && player.position.z > towerLadderRailZ)
+          || (inputY < -0.1 && player.position.y >= towerPlatformTop + 1.15 && player.position.z < towerLadderRailZ)
+        )
+      ) {
+        playerOnTowerLadder = true;
+        verticalVelocity = 0;
+        player.position.x = towerLadderX;
+        player.position.z = towerLadderAccessZ;
+      }
+      if (playerOnTowerLadder) {
+        if (inputY > 0.1) player.position.y = Math.min(towerPlatformTop + 1.65, player.position.y + 5.2 * dt);
+        if (inputY < -0.1) player.position.y = Math.max(1.65, player.position.y - 5.2 * dt);
+        player.position.x = towerLadderX;
+        verticalVelocity = 0;
+        if (player.position.y >= towerPlatformTop + 1.65) {
+          player.position.y = towerPlatformTop + 1.65;
+          player.position.z = towerPlatform.z + towerPlatform.depth / 2 - 0.8;
+          playerOnTowerLadder = false;
+          playerGrounded = true;
+        } else if (player.position.y <= 1.65) {
+          player.position.y = 1.65;
+          player.position.z = towerLadderAccessZ;
+          playerOnTowerLadder = false;
+          playerGrounded = true;
+        } else {
+          playerGrounded = false;
+        }
+      } else if (length > 0) {
         const speed = 7.2 * (sprintActive ? 1.62 : 1) * dt / Math.max(1, length);
         const dx = (Math.cos(yaw) * inputX + Math.sin(yaw) * inputY) * speed;
         const dz = (Math.sin(yaw) * inputX - Math.cos(yaw) * inputY) * speed;
@@ -4027,36 +4006,34 @@ const GamePage = () => {
       }
 
       const groundAfterMovement = getGroundHeight(player.position.x, player.position.z);
-      const stayedOnRamp = (
-        isWithinTowerRamp(startGroundX, startGroundZ)
-        && isWithinTowerRamp(player.position.x, player.position.z)
-      );
-      if (
-        playerGrounded
-        && groundBeforeMovement - groundAfterMovement > maxStepUp
-        && !stayedOnRamp
-      ) {
+      if (playerOnTowerLadder) {
         playerGrounded = false;
-      }
-      if (playerGrounded) {
-        const targetEyeHeight = groundAfterMovement + 1.65;
-        player.position.y = THREE.MathUtils.lerp(
-          player.position.y,
-          targetEyeHeight,
-          1 - Math.exp(-60 * dt),
-        );
-        if (Math.abs(targetEyeHeight - player.position.y) < 0.015) {
-          player.position.y = targetEyeHeight;
-        }
         verticalVelocity = 0;
       } else {
-        verticalVelocity -= 18 * dt;
-        player.position.y += verticalVelocity * dt;
-        const groundEyeHeight = groundAfterMovement + 1.65;
-        if (verticalVelocity <= 0 && player.position.y <= groundEyeHeight) {
-          player.position.y = groundEyeHeight;
+        if (playerGrounded && groundBeforeMovement - groundAfterMovement > maxStepUp) {
+          playerGrounded = false;
+        }
+
+        if (playerGrounded) {
+          const targetEyeHeight = groundAfterMovement + 1.65;
+          player.position.y = THREE.MathUtils.lerp(
+            player.position.y,
+            targetEyeHeight,
+            1 - Math.exp(-60 * dt),
+          );
+          if (Math.abs(targetEyeHeight - player.position.y) < 0.015) {
+            player.position.y = targetEyeHeight;
+          }
           verticalVelocity = 0;
-          playerGrounded = true;
+        } else {
+          verticalVelocity -= 18 * dt;
+          player.position.y += verticalVelocity * dt;
+          const groundEyeHeight = groundAfterMovement + 1.65;
+          if (verticalVelocity <= 0 && player.position.y <= groundEyeHeight) {
+            player.position.y = groundEyeHeight;
+            verticalVelocity = 0;
+            playerGrounded = true;
+          }
         }
       }
       const nearbyChest = treasureChests.find((chest) => (
