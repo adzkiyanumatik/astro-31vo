@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
-import { ArrowLeft } from "lucide-react";
+import {
+  Crosshair,
+  Hand,
+  HeartPulse,
+  Keyboard,
+  MapPin,
+  Package,
+  Shield,
+  Trophy,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -9,7 +18,8 @@ type MoveInput = { x: number; y: number };
 type QualitySetting = "low" | "medium" | "high";
 type BrightnessSetting = "normal" | "bright" | "very-bright";
 type WeaponId = "rifle" | "pistol";
-type GamePhase = "combat" | "supply" | "treasure" | "paused" | "gameover" | "complete";
+type GamePhase = "combat" | "supply" | "treasure" | "paused" | "arena-select" | "gameover" | "complete";
+type ArenaId = "training" | "ruins" | "arctic" | "jungle" | "harbor" | "volcano";
 type SupplyQuestion = { prompt: string; answer: number; options: number[] };
 type SoundCue = "rifle" | "pistol" | "hit" | "headshot" | "enemy" | "wave" | "correct" | "wrong" | "gameover" | "reload" | "empty" | "step";
 type EnemyVoiceKind = "scream" | "death" | "hurt";
@@ -123,6 +133,147 @@ const WEAPON_CONFIG: Record<WeaponId, {
 const STARTING_ENEMIES = 10;
 const TREASURE_COUNT = 5;
 const GUNFIRE_ALERT_RADIUS = 36;
+const ARENAS: Array<{
+  id: ArenaId;
+  name: string;
+  subtitle: string;
+  description: string;
+  terrain: string;
+  tactic: string;
+  icon: string;
+  horizon: string;
+  midday: string;
+  zenith: string;
+  ground: string;
+  road: string;
+  clearing: string;
+  concrete: string;
+  metal: string;
+  accent: string;
+  sunlight: string;
+  dust: string;
+}> = [
+  {
+    id: "training",
+    name: "Kamp Garuda",
+    subtitle: "Pangkalan latihan gurun",
+    description: "Bunker, menara pengawas, dan lapangan terbuka.",
+    terrain: "Gurun · Jarak menengah",
+    tactic: "Manfaatkan bunker dan menara untuk mengatur jalur pandang.",
+    icon: "🪖",
+    horizon: "#66594d",
+    midday: "#ad8060",
+    zenith: "#394955",
+    ground: "#97856b",
+    road: "#77756d",
+    clearing: "#b8a276",
+    concrete: "#b7b1a2",
+    metal: "#929d9d",
+    accent: "#d7a65a",
+    sunlight: "#ffbd78",
+    dust: "#d8bd8b",
+  },
+  {
+    id: "ruins",
+    name: "Kota Runtuh",
+    subtitle: "Zona urban pascakonflik",
+    description: "Kabut debu, beton retak, dan cahaya kota yang padam.",
+    terrain: "Urban · Banyak sudut",
+    tactic: "Bergerak dari reruntuhan ke reruntuhan agar tidak terbuka.",
+    icon: "🏙️",
+    horizon: "#514b49",
+    midday: "#967b70",
+    zenith: "#28323c",
+    ground: "#77716c",
+    road: "#55585a",
+    clearing: "#91877b",
+    concrete: "#777b7b",
+    metal: "#737b80",
+    accent: "#ff8b52",
+    sunlight: "#ff9b69",
+    dust: "#c5a995",
+  },
+  {
+    id: "arctic",
+    name: "Pangkalan Arktik",
+    subtitle: "Pos terdepan di tundra beku",
+    description: "Hamparan salju, kabut dingin, dan baja berselimut es.",
+    terrain: "Salju · Pandangan luas",
+    tactic: "Gunakan gundukan es sebagai perlindungan saat melintasi salju.",
+    icon: "❄️",
+    horizon: "#8299a8",
+    midday: "#c5d9e3",
+    zenith: "#526b82",
+    ground: "#d5e0df",
+    road: "#9eafb5",
+    clearing: "#edf2e8",
+    concrete: "#bccbd0",
+    metal: "#8da8b2",
+    accent: "#68e5f5",
+    sunlight: "#c7efff",
+    dust: "#d9f1fb",
+  },
+  {
+    id: "jungle",
+    name: "Rimba Liar",
+    subtitle: "Garis depan hutan tropis",
+    description: "Tanah lembap, kanopi lebat, dan suasana hijau berkabut.",
+    terrain: "Hutan · Jarak dekat",
+    tactic: "Dekati musuh melalui perlindungan rimba dan awasi sisi arena.",
+    icon: "🌿",
+    horizon: "#465e4d",
+    midday: "#849b67",
+    zenith: "#233b35",
+    ground: "#596d43",
+    road: "#4b5140",
+    clearing: "#80905a",
+    concrete: "#787d65",
+    metal: "#737c61",
+    accent: "#c6dc62",
+    sunlight: "#d2df83",
+    dust: "#b2c47d",
+  },
+  {
+    id: "harbor",
+    name: "Pelabuhan Baja",
+    subtitle: "Dermaga kontainer dalam siaga",
+    description: "Dermaga basah, baja berkarat, dan cahaya mercusuar.",
+    terrain: "Dermaga · Koridor baja",
+    tactic: "Susuri koridor kontainer dan hindari berlari di jalur terbuka.",
+    icon: "⚓",
+    horizon: "#45677b",
+    midday: "#7fa2ae",
+    zenith: "#243c53",
+    ground: "#687778",
+    road: "#48575d",
+    clearing: "#849493",
+    concrete: "#79888a",
+    metal: "#607c8a",
+    accent: "#42d5dc",
+    sunlight: "#83d6df",
+    dust: "#9db8b5",
+  },
+  {
+    id: "volcano",
+    name: "Kawah Merah",
+    subtitle: "Medan vulkanik berbahaya",
+    description: "Batu hitam, langit membara, dan pijar lava di kejauhan.",
+    terrain: "Vulkanik · Perlindungan batu",
+    tactic: "Berpindah cepat antarbatu dan tetap waspada di area terbuka.",
+    icon: "🌋",
+    horizon: "#733d35",
+    midday: "#b45c3a",
+    zenith: "#302b38",
+    ground: "#51443d",
+    road: "#393536",
+    clearing: "#71503c",
+    concrete: "#6d5a50",
+    metal: "#6d625b",
+    accent: "#ff6037",
+    sunlight: "#ff8653",
+    dust: "#c7835e",
+  },
+];
 const BEST_SCORE_KEY = "numatik-strike-best-score";
 const TOUCH_LOOK_SENSITIVITY_KEY = "numatik-strike-touch-look-sensitivity";
 const TOUCH_LOOK_MODE_KEY = "numatik-strike-touch-look-mode";
@@ -146,7 +297,6 @@ const ENEMY_SCREAM_VARIANTS: EnemyScreamVariant[] = [
   { pitch: 226, duration: 0.47, formants: [650, 1080, 2380] },
   { pitch: 202, duration: 0.39, formants: [720, 1370, 2820] },
 ];
-const SKY_HORIZON_COLOR = "#66594d";
 const QUALITY_FOG: Record<QualitySetting, { near: number; far: number }> = {
   low: { near: 30, far: 124 },
   medium: { near: 36, far: 145 },
@@ -229,6 +379,10 @@ const GamePage = () => {
   const navigate = useNavigate();
   const mountRef = useRef<HTMLDivElement>(null);
   const [locked, setLocked] = useState(false);
+  const [selectedArena, setSelectedArena] = useState<ArenaId>("training");
+  const [pendingArena, setPendingArena] = useState<ArenaId>("training");
+  const arenaPickerReturnPhase = useRef<GamePhase>("arena-select");
+  const hasStartedGame = useRef(false);
   const [mobile, setMobile] = useState(false);
   const mobileRef = useRef(mobile);
   const [quality, setQuality] = useState<QualitySetting>("medium");
@@ -266,8 +420,8 @@ const GamePage = () => {
   const playerHealthRef = useRef(100);
   const [playerArmor, setPlayerArmor] = useState(0);
   const playerArmorRef = useRef(0);
-  const [gamePhase, setGamePhase] = useState<GamePhase>("combat");
-  const gamePhaseRef = useRef<GamePhase>("combat");
+  const [gamePhase, setGamePhase] = useState<GamePhase>("arena-select");
+  const gamePhaseRef = useRef<GamePhase>("arena-select");
   const [supplyQuestion, setSupplyQuestion] = useState<SupplyQuestion | null>(null);
   const supplyQuestionRef = useRef<SupplyQuestion | null>(null);
   const [supplyMessage, setSupplyMessage] = useState<string | null>(null);
@@ -378,7 +532,8 @@ const GamePage = () => {
     const scene = sceneRef.current;
     if (scene) {
       const fog = QUALITY_FOG[nextQuality];
-      scene.fog = new THREE.Fog(SKY_HORIZON_COLOR, fog.near, fog.far);
+      const arena = ARENAS.find((candidate) => candidate.id === selectedArena) ?? ARENAS[0]!;
+      scene.fog = new THREE.Fog(arena.horizon, fog.near, fog.far);
       scene.traverse((object) => {
         if (!(object instanceof THREE.Mesh)) return;
         if (object.userData.strikeShadowEligible) {
@@ -421,6 +576,7 @@ const GamePage = () => {
   useEffect(() => {
     const host = mountRef.current;
     if (!host) return;
+    const arena = ARENAS.find((candidate) => candidate.id === selectedArena) ?? ARENAS[0]!;
 
     let teardown: (() => void) | undefined;
     const initFrame = window.requestAnimationFrame(() => {
@@ -456,8 +612,8 @@ const GamePage = () => {
     const scene = new THREE.Scene();
     sceneRef.current = scene;
     const initialFog = QUALITY_FOG[qualityRef.current];
-    scene.background = new THREE.Color(SKY_HORIZON_COLOR);
-    scene.fog = new THREE.Fog(SKY_HORIZON_COLOR, initialFog.near, initialFog.far);
+    scene.background = new THREE.Color(arena.horizon);
+    scene.fog = new THREE.Fog(arena.horizon, initialFog.near, initialFog.far);
     const camera = new THREE.PerspectiveCamera(72, host.clientWidth / Math.max(host.clientHeight, 1), 0.1, 180);
     const player = new THREE.Group();
     player.position.set(0, 1.65, 51);
@@ -472,7 +628,7 @@ const GamePage = () => {
     hemisphereLightRef.current = hemisphereLight;
     scene.add(hemisphereLight);
     scene.add(new THREE.AmbientLight(0x777b79, 0.2));
-    const keyLight = new THREE.DirectionalLight(0xffbd78, 2.9);
+    const keyLight = new THREE.DirectionalLight(arena.sunlight, 2.9);
     keyLight.position.set(-32, 42, -24);
     keyLight.castShadow = false;
     keyLight.shadow.camera.left = -70;
@@ -485,7 +641,7 @@ const GamePage = () => {
     keyLight.shadow.normalBias = 0.025;
     sunlightRef.current = keyLight;
     scene.add(keyLight);
-    const fillLight = new THREE.DirectionalLight(0x71899a, 0.7);
+    const fillLight = new THREE.DirectionalLight(arena.accent, 0.7);
     fillLight.position.set(28, 18, 34);
     scene.add(fillLight);
 
@@ -637,11 +793,11 @@ const GamePage = () => {
       depthWrite: false,
       toneMapped: false,
     });
-    const glowMat = new THREE.MeshBasicMaterial({ color: "#ffd18b", toneMapped: false });
+    const glowMat = new THREE.MeshBasicMaterial({ color: arena.accent, toneMapped: false });
     const darkInsetMat = material("#343a3b", 0.8, 0.14);
     materials.push(glowMat, treasureGlowMat);
     const searchlightBeamMat = new THREE.MeshBasicMaterial({
-      color: "#f7d49d",
+      color: arena.accent,
       transparent: true,
       opacity: 0.09,
       depthWrite: false,
@@ -649,17 +805,17 @@ const GamePage = () => {
       toneMapped: false,
     });
     materials.push(searchlightBeamMat);
-    floorMat.map = createSurfaceTexture("#97856b", "earth");
-    roadMat.map = createSurfaceTexture("#77756d", "earth");
-    openZoneMat.map = createSurfaceTexture("#b8a276", "earth");
-    perimeterMat.map = createSurfaceTexture("#898d88", "concrete");
-    bunkerMat.map = createSurfaceTexture("#b7b1a2", "concrete");
-    bunkerRoofMat.map = createSurfaceTexture("#858b84", "concrete");
+    floorMat.map = createSurfaceTexture(arena.ground, "earth");
+    roadMat.map = createSurfaceTexture(arena.road, "earth");
+    openZoneMat.map = createSurfaceTexture(arena.clearing, "earth");
+    perimeterMat.map = createSurfaceTexture(arena.concrete, "concrete");
+    bunkerMat.map = createSurfaceTexture(arena.concrete, "concrete");
+    bunkerRoofMat.map = createSurfaceTexture(arena.metal, "concrete");
     lowWallMat.map = bunkerMat.map;
     crateMat.map = createSurfaceTexture("#c3a77a", "wood");
-    crateMetalMat.map = createSurfaceTexture("#aeb8af", "metal");
-    towerMat.map = createSurfaceTexture("#929d9d", "metal");
-    steelDetailMat.map = createSurfaceTexture("#a4ada6", "metal");
+    crateMetalMat.map = createSurfaceTexture(arena.metal, "metal");
+    towerMat.map = createSurfaceTexture(arena.metal, "metal");
+    steelDetailMat.map = createSurfaceTexture(arena.metal, "metal");
     sandbagMat.map = createSurfaceTexture("#bdb18b", "earth");
     vehicleMat.map = createSurfaceTexture("#909384", "metal");
     puddleMat.map = createSurfaceTexture("#758285", "earth");
@@ -834,9 +990,9 @@ const GamePage = () => {
     const skyGeometry = new THREE.SphereGeometry(145, 32, 20);
     const skyPositions = skyGeometry.getAttribute("position");
     const skyColors = new Float32Array(skyPositions.count * 3);
-    const horizonColor = new THREE.Color(SKY_HORIZON_COLOR);
-    const middayColor = new THREE.Color("#ad8060");
-    const zenithColor = new THREE.Color("#394955");
+    const horizonColor = new THREE.Color(arena.horizon);
+    const middayColor = new THREE.Color(arena.midday);
+    const zenithColor = new THREE.Color(arena.zenith);
     const skyColor = new THREE.Color();
     for (let i = 0; i < skyPositions.count; i += 1) {
       const height = THREE.MathUtils.clamp(skyPositions.getY(i) / 145, 0, 1);
@@ -1109,8 +1265,87 @@ const GamePage = () => {
       scene.add(patch);
       return patch;
     };
+    const addArenaBackdrop = () => {
+      if (arena.id === "training") return;
+      const landmarkMaterial = material(arena.concrete, 0.84, 0.12);
+      const accentMaterial = new THREE.MeshBasicMaterial({ color: arena.accent, toneMapped: false });
+      const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const coneGeometry = new THREE.ConeGeometry(1, 1, arena.id === "arctic" ? 6 : 7);
+      const trunkGeometry = new THREE.CylinderGeometry(0.7, 1.1, 11, 7);
+      materials.push(accentMaterial);
+      const addMesh = (
+        geometry: THREE.BufferGeometry,
+        mat: THREE.Material,
+        x: number,
+        y: number,
+        z: number,
+        width: number,
+        height: number,
+        depth: number,
+      ) => {
+        const mesh = new THREE.Mesh(geometry, mat);
+        mesh.position.set(x, y, z);
+        mesh.scale.set(width, height, depth);
+        mesh.userData.strikeShadowEligible = true;
+        scene.add(mesh);
+      };
+      if (arena.id === "ruins") {
+        [-1, 1].forEach((side) => {
+          [-43, -18, 12, 42].forEach((z, index) => {
+            addMesh(
+              boxGeometry,
+              landmarkMaterial,
+              side * 67,
+              5 + (index % 2) * 2,
+              z,
+              8 + (index % 3) * 2,
+              14 + (index % 2) * 6,
+              13,
+            );
+            addMesh(boxGeometry, accentMaterial, side * 67, 8, z - 6.6, 2.4, 0.18, 0.12);
+          });
+        });
+      } else if (arena.id === "arctic" || arena.id === "volcano") {
+        [-1, 1].forEach((side) => {
+          [-44, -22, 8, 34, 50].forEach((z, index) => {
+            const height = arena.id === "arctic" ? 7 + (index % 3) * 2 : 9 + (index % 3) * 3;
+            addMesh(
+              coneGeometry,
+              landmarkMaterial,
+              side * 66,
+              height / 2,
+              z,
+              arena.id === "arctic" ? 3.2 : 4.5,
+              height,
+              arena.id === "arctic" ? 3.2 : 4.5,
+            );
+            if (arena.id === "volcano" && index % 2 === 0) {
+              addMesh(coneGeometry, accentMaterial, side * 66, height * 0.72, z, 0.36, 1.8, 0.36);
+            }
+          });
+        });
+      } else if (arena.id === "jungle") {
+        [-1, 1].forEach((side) => {
+          [-46, -26, 4, 30, 50].forEach((z, index) => {
+            const x = side * 66;
+            addMesh(trunkGeometry, landmarkMaterial, x, 5.5, z, 1, 1, 1);
+            addMesh(coneGeometry, accentMaterial, x, 11 + (index % 2), z, 5.2, 8, 5.2);
+          });
+        });
+      } else if (arena.id === "harbor") {
+        [-1, 1].forEach((side) => {
+          const x = side * 67;
+          [-1, 1].forEach((zSide) => {
+            addMesh(boxGeometry, landmarkMaterial, x, 9, zSide * 38, 1.1, 18, 1.1);
+            addMesh(boxGeometry, landmarkMaterial, x, 18, zSide * 38, 1.1, 1.1, 40);
+            addMesh(boxGeometry, accentMaterial, x, 16, zSide * 38, 0.28, 4, 0.28);
+          });
+        });
+      }
+    };
 
     // A 120 x 120 daylight training zone with an open range, bunker corridor, crate yards, and watchtower.
+    addArenaBackdrop();
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), floorMat);
     floor.userData.strikeShadowReceiver = true;
     floor.rotation.x = -Math.PI / 2;
@@ -1153,6 +1388,38 @@ const GamePage = () => {
       { x: -27, y: 0.8, z: 13, w: 1.2, h: 1.6, d: 9, solid: true },
     ];
     addBoxInstances(lowWallMat, lowWalls);
+    const arenaCover: BoxInstanceSpec[] = arena.id === "ruins"
+      ? [
+        { x: -10, y: 1.15, z: -38, w: 8, h: 2.3, d: 1.4, solid: true, rotY: -0.12, color: "#686d6e" },
+        { x: 10, y: 1.15, z: -38, w: 8, h: 2.3, d: 1.4, solid: true, rotY: 0.12, color: "#85827a" },
+        { x: 0, y: 0.95, z: -29, w: 1.4, h: 1.9, d: 7, solid: true, color: "#6b6a65" },
+      ]
+      : arena.id === "arctic"
+        ? [
+          { x: -10, y: 0.9, z: -38, w: 10, h: 1.8, d: 2.1, solid: true, color: "#e5eeee" },
+          { x: 10, y: 0.9, z: -38, w: 10, h: 1.8, d: 2.1, solid: true, color: "#c5d9e3" },
+          { x: 0, y: 0.75, z: -29, w: 2, h: 1.5, d: 8, solid: true, color: "#e5eeee" },
+        ]
+        : arena.id === "jungle"
+          ? [
+            { x: -10, y: 0.65, z: -38, w: 11, h: 1.3, d: 1.2, solid: true, rotY: -0.1, color: "#596d43" },
+            { x: 10, y: 0.65, z: -38, w: 11, h: 1.3, d: 1.2, solid: true, rotY: 0.1, color: "#78804b" },
+            { x: 0, y: 0.8, z: -29, w: 1.3, h: 1.6, d: 8, solid: true, color: "#626749" },
+          ]
+          : arena.id === "harbor"
+            ? [
+              { x: -10, y: 2.1, z: -38, w: 8, h: 4.2, d: 2.5, solid: true, color: "#657d82" },
+              { x: 10, y: 2.1, z: -38, w: 8, h: 4.2, d: 2.5, solid: true, color: "#8a5945" },
+              { x: 0, y: 1.1, z: -29, w: 2, h: 2.2, d: 7, solid: true, color: "#546d78" },
+            ]
+            : arena.id === "volcano"
+              ? [
+                { x: -10, y: 1, z: -38, w: 9, h: 2, d: 2, solid: true, rotY: -0.15, color: "#51443d" },
+                { x: 10, y: 1.1, z: -38, w: 9, h: 2.2, d: 2, solid: true, rotY: 0.15, color: "#71503c" },
+                { x: 0, y: 0.9, z: -29, w: 2, h: 1.8, d: 8, solid: true, color: "#393536" },
+              ]
+              : [];
+    addBoxInstances(bunkerMat, arenaCover);
 
     let crateVariant = 0;
     const makeCrate = (x: number, y: number, z: number): BoxInstanceSpec => {
@@ -1265,7 +1532,7 @@ const GamePage = () => {
     const dustGeometry = new THREE.BufferGeometry();
     dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
     const dustMaterial = new THREE.PointsMaterial({
-      color: "#d8bd8b",
+      color: arena.dust,
       size: 0.14,
       sizeAttenuation: true,
       transparent: true,
@@ -1999,6 +2266,8 @@ const GamePage = () => {
       else if (!active && existingIndex >= 0) combatTargets.splice(existingIndex, 1);
     };
     setEnemyCount(STARTING_ENEMIES);
+    scoreRef.current = 0;
+    setScore(0);
     treasuresFoundRef.current = 0;
     setTreasuresFound(0);
     activeTreasureRef.current = null;
@@ -2011,6 +2280,14 @@ const GamePage = () => {
     });
     setWave(1);
     waveRef.current = 1;
+    playerHealthRef.current = 100;
+    setPlayerHealth(100);
+    playerArmorRef.current = 0;
+    setPlayerArmor(0);
+    ammoRef.current = createInitialAmmo();
+    setAmmo(ammoRef.current);
+    activeWeaponRef.current = "rifle";
+    setActiveWeapon("rifle");
 
     let yaw = 0;
     let pitch = 0;
@@ -3618,6 +3895,7 @@ const GamePage = () => {
     };
     const radarRange = 58;
     const restartGame = () => {
+      hasStartedGame.current = true;
       if (document.pointerLockElement) document.exitPointerLock?.();
       const now = performance.now();
       waveRef.current = 1;
@@ -3997,8 +4275,8 @@ const GamePage = () => {
         }
       } else if (length > 0) {
         const speed = 7.2 * (sprintActive ? 1.62 : 1) * dt / Math.max(1, length);
-        const dx = (Math.cos(yaw) * inputX + Math.sin(yaw) * inputY) * speed;
-        const dz = (Math.sin(yaw) * inputX - Math.cos(yaw) * inputY) * speed;
+        const dx = (Math.cos(yaw) * inputX - Math.sin(yaw) * inputY) * speed;
+        const dz = (-Math.sin(yaw) * inputX - Math.cos(yaw) * inputY) * speed;
         const nextX = THREE.MathUtils.clamp(player.position.x + dx, -playerLimit, playerLimit);
         const nextZ = THREE.MathUtils.clamp(player.position.z + dz, -playerLimit, playerLimit);
         movePlayerTo(nextX, player.position.z);
@@ -4247,7 +4525,7 @@ const GamePage = () => {
       window.cancelAnimationFrame(initFrame);
       teardown?.();
     };
-  }, []);
+  }, [selectedArena]);
 
   const updateJoystick = (event: PointerEvent<HTMLDivElement>) => {
     if (gamePhaseRef.current !== "combat") return;
@@ -4503,6 +4781,80 @@ const GamePage = () => {
       console.warn("Pengaturan getar tidak tersimpan:", error);
     }
   };
+  const openArenaPicker = () => {
+    const currentPhase = gamePhaseRef.current;
+    if (currentPhase !== "combat" && currentPhase !== "paused" && currentPhase !== "gameover" && currentPhase !== "complete") return;
+    arenaPickerReturnPhase.current = currentPhase;
+    setPendingArena(selectedArena);
+    if (currentPhase === "combat") pauseGameRef.current?.();
+    gamePhaseRef.current = "arena-select";
+    setGamePhase("arena-select");
+  };
+  const closeArenaPicker = () => {
+    if (arenaPickerReturnPhase.current === "combat") resumeGameRef.current?.();
+    else {
+      gamePhaseRef.current = arenaPickerReturnPhase.current;
+      setGamePhase(arenaPickerReturnPhase.current);
+    }
+  };
+  const applyArenaSelection = () => {
+    if (pendingArena === selectedArena) {
+      if (hasStartedGame.current) {
+        restartGameRef.current?.();
+        return;
+      }
+      hasStartedGame.current = true;
+      gamePhaseRef.current = "combat";
+      setGamePhase("combat");
+      soundRef.current?.("wave");
+      return;
+    }
+    hasStartedGame.current = true;
+    scoreRef.current = 0;
+    setScore(0);
+    setEnemyCount(STARTING_ENEMIES);
+    waveRef.current = 1;
+    setWave(1);
+    treasuresFoundRef.current = 0;
+    setTreasuresFound(0);
+    activeTreasureRef.current = null;
+    supplyResolvedRef.current = false;
+    supplyQuestionRef.current = null;
+    setSupplyQuestion(null);
+    setSupplyMessage(null);
+    setTreasureAnswerCorrect(null);
+    playerHealthRef.current = 100;
+    setPlayerHealth(100);
+    playerArmorRef.current = 0;
+    setPlayerArmor(0);
+    aimingRef.current = false;
+    setAiming(false);
+    sprintingRef.current = false;
+    setSprinting(false);
+    firingRef.current = false;
+    reloadingRef.current = false;
+    setIsReloading(false);
+    setHitFeedback(null);
+    setDamageFlashId(0);
+    setIncomingDirection(null);
+    setKillFeed([]);
+    setRadarContacts([]);
+    setRadarTreasureContacts([]);
+    ammoRef.current = createInitialAmmo();
+    setAmmo(ammoRef.current);
+    activeWeaponRef.current = "rifle";
+    setActiveWeapon("rifle");
+    gamePhaseRef.current = "combat";
+    setGamePhase("combat");
+    setSelectedArena(pendingArena);
+  };
+  const previewArena = ARENAS.find((arena) => arena.id === pendingArena) ?? ARENAS[0]!;
+  const arenaPreviewStyle = {
+    "--arena-horizon": previewArena.horizon,
+    "--arena-midday": previewArena.midday,
+    "--arena-accent": previewArena.accent,
+    "--arena-ground": previewArena.ground,
+  } as CSSProperties;
 
   return (
     <main className="strike-page">
@@ -4614,6 +4966,68 @@ const GamePage = () => {
          .strike-back:hover{border-color:rgba(60,220,233,.55);color:#e9fbff}
          .strike-phase-layer{position:absolute;z-index:6;inset:0;display:grid;place-items:center;padding:16px;background:rgba(3,10,18,.78);backdrop-filter:blur(7px);pointer-events:auto}
          .strike-phase-card{width:min(520px,calc(100vw - 28px));max-height:calc(100dvh - 32px);overflow:auto;padding:clamp(22px,5vw,38px);border:1px solid rgba(92,220,230,.38);background:linear-gradient(145deg,rgba(9,28,42,.98),rgba(6,14,27,.98));box-shadow:0 24px 90px rgba(0,0,0,.42);text-align:center}
+         .strike-phase-card.is-arena-picker{width:min(1080px,calc(100vw - 28px));max-height:calc(100dvh - 24px);padding:clamp(15px,2.4vw,27px);border-color:rgba(111,224,255,.55);background:radial-gradient(ellipse at 9% 0%,rgba(27,136,174,.22),transparent 40%),radial-gradient(ellipse at 100% 100%,rgba(112,61,198,.19),transparent 42%),linear-gradient(145deg,rgba(7,19,37,.98),rgba(8,12,27,.99));text-align:left}
+         .strike-briefing-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+         .strike-briefing-kicker{display:flex;align-items:center;gap:9px;color:#8cecff;font:700 9px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.2em}
+         .strike-briefing-emblem{display:grid;width:35px;height:35px;place-items:center;border:1px solid rgba(98,228,255,.45);border-radius:11px;background:linear-gradient(145deg,rgba(30,186,222,.28),rgba(108,70,211,.25));color:#b4f7ff;box-shadow:0 0 24px rgba(43,194,228,.18)}
+         .strike-briefing-count{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid rgba(173,146,255,.35);border-radius:999px;background:rgba(107,73,203,.16);color:#d5c7ff;font:600 8px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.08em}
+         .strike-briefing-title{margin:0;color:#f5fbff;font:800 clamp(23px,4vw,36px) var(--font-display,'Orbitron'),sans-serif;letter-spacing:.08em;text-shadow:0 0 28px rgba(83,198,255,.22)}
+         .strike-briefing-lead{margin:5px 0 0;color:#9bb2cb;font-size:12px}
+         .strike-briefing-layout{display:grid;grid-template-columns:minmax(0,1.22fr) minmax(270px,.78fr);gap:14px;align-items:stretch}
+         .strike-arena-side{display:grid;gap:10px;align-content:start}
+         .strike-arena-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+         .strike-arena-option{position:relative;display:flex;min-height:86px;flex-direction:column;justify-content:flex-end;overflow:hidden;padding:10px;border:1px solid color-mix(in srgb,var(--arena-accent) 32%,rgba(166,198,226,.25));border-radius:12px;background:radial-gradient(ellipse at 88% 8%,color-mix(in srgb,var(--arena-accent) 42%,transparent),transparent 52%),linear-gradient(145deg,color-mix(in srgb,var(--arena-horizon) 58%,#10182b),rgba(8,15,28,.98));color:#effcff;text-align:left;cursor:pointer;isolation:isolate;transition:transform .2s,border-color .2s,box-shadow .2s}
+         .strike-arena-option:before{position:absolute;z-index:-1;right:-12px;top:-30px;width:78px;height:78px;border:1px solid color-mix(in srgb,var(--arena-accent) 45%,transparent);border-radius:50%;content:"";box-shadow:0 0 0 10px color-mix(in srgb,var(--arena-accent) 9%,transparent),0 0 0 22px color-mix(in srgb,var(--arena-accent) 6%,transparent)}
+         .strike-arena-option:hover{transform:translateY(-2px);border-color:var(--arena-accent);box-shadow:0 8px 22px color-mix(in srgb,var(--arena-accent) 16%,transparent)}
+         .strike-arena-option[aria-pressed=true]{border-color:var(--arena-accent);background:radial-gradient(ellipse at 86% 12%,color-mix(in srgb,var(--arena-accent) 58%,transparent),transparent 57%),linear-gradient(145deg,color-mix(in srgb,var(--arena-horizon) 75%,#10182b),rgba(8,15,28,.98));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--arena-accent) 44%,transparent),0 0 22px color-mix(in srgb,var(--arena-accent) 24%,transparent)}
+         .strike-arena-option:focus-visible,.strike-phase-button:focus-visible{outline:2px solid #fff;outline-offset:3px}
+         .strike-arena-icon{position:absolute;right:11px;top:8px;font-size:22px;filter:drop-shadow(0 3px 8px rgba(0,0,0,.4))}
+         .strike-arena-selected{position:absolute;left:8px;top:8px;padding:4px 6px;border:1px solid color-mix(in srgb,var(--arena-accent) 70%,white);border-radius:999px;background:rgba(5,13,25,.62);color:#fff;font:700 6px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.1em}
+         .strike-arena-name{display:block;font:700 9px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.045em}
+         .strike-arena-subtitle{display:block;margin-top:4px;color:color-mix(in srgb,var(--arena-accent) 55%,#d9f5ff);font-size:9px;line-height:1.2}
+         .strike-arena-description{display:none}
+         .strike-arena-showcase{position:relative;min-height:232px;overflow:hidden;border:1px solid color-mix(in srgb,var(--arena-accent) 57%,rgba(157,201,232,.4));border-radius:16px;background:linear-gradient(180deg,var(--arena-horizon),var(--arena-midday) 64%,var(--arena-ground));box-shadow:0 12px 34px rgba(0,0,0,.26),inset 0 0 50px rgba(4,10,26,.28);isolation:isolate;animation:strike-preview-arrive .35s ease-out both}
+         @keyframes strike-preview-arrive{from{opacity:.55;transform:scale(.985)}to{opacity:1;transform:scale(1)}}
+         .strike-arena-showcase:before{position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(5,13,31,.08),transparent 45%,rgba(7,11,24,.58)),radial-gradient(ellipse at 50% 100%,color-mix(in srgb,var(--arena-accent) 32%,transparent),transparent 67%);content:""}
+         .strike-arena-sun{position:absolute;right:13%;top:13%;width:48px;height:48px;border-radius:50%;background:color-mix(in srgb,var(--arena-accent) 78%,white);box-shadow:0 0 25px color-mix(in srgb,var(--arena-accent) 78%,transparent),0 0 70px color-mix(in srgb,var(--arena-accent) 38%,transparent)}
+         .strike-arena-ridge{position:absolute;right:-8%;bottom:22%;width:75%;height:44%;border-radius:55% 0 0;background:linear-gradient(140deg,color-mix(in srgb,var(--arena-ground) 60%,#151d35),color-mix(in srgb,var(--arena-horizon) 60%,#10172b));transform:rotate(-8deg)}
+         .strike-arena-ridge:before{position:absolute;left:-32%;bottom:-18%;width:72%;height:74%;border-radius:50% 50% 0 0;background:linear-gradient(160deg,color-mix(in srgb,var(--arena-ground) 76%,#18243a),#101729);content:""}
+         .strike-arena-silhouette{position:absolute;bottom:17%;left:50%;display:flex;align-items:flex-end;gap:9px;transform:translateX(-50%)}
+         .strike-arena-silhouette i{display:block;width:clamp(24px,4vw,43px);height:clamp(42px,8vw,82px);border:1px solid color-mix(in srgb,var(--arena-accent) 50%,rgba(255,255,255,.22));border-radius:5px 5px 0 0;background:linear-gradient(135deg,color-mix(in srgb,var(--arena-horizon) 70%,#1b2435),rgba(7,13,24,.9));box-shadow:inset 0 0 15px color-mix(in srgb,var(--arena-accent) 16%,transparent)}
+         .strike-arena-silhouette i:nth-child(2){height:clamp(56px,10vw,106px)}
+         .strike-arena-silhouette i:nth-child(3){height:clamp(34px,6vw,65px)}
+         .strike-arena-showcase.is-ruins .strike-arena-silhouette i{border-radius:0;background:linear-gradient(90deg,rgba(8,12,23,.9) 22%,color-mix(in srgb,var(--arena-accent) 38%,#10172b) 23% 29%,rgba(8,12,23,.9) 30%);clip-path:polygon(0 13%,15% 13%,15% 0,38% 0,38% 17%,64% 17%,64% 5%,100% 5%,100% 100%,0 100%)}
+         .strike-arena-showcase.is-arctic .strike-arena-silhouette i{border-radius:45% 45% 0 0;background:linear-gradient(145deg,#d9f4ff,#587991 70%,#273c50)}
+         .strike-arena-showcase.is-jungle .strike-arena-silhouette i{width:clamp(30px,5vw,52px);border:0;border-radius:48% 48% 12% 12%;background:linear-gradient(90deg,#263f31,#9cb85a 52%,#33472c);clip-path:polygon(50% 0,100% 46%,78% 46%,100% 73%,70% 73%,91% 100%,8% 100%,30% 73%,0 73%,24% 46%,0 46%)}
+         .strike-arena-showcase.is-harbor .strike-arena-silhouette i{border-radius:2px;background:repeating-linear-gradient(0deg,rgba(8,14,24,.92) 0 12px,color-mix(in srgb,var(--arena-accent) 45%,#344957) 13px 15px)}
+         .strike-arena-showcase.is-volcano .strike-arena-ridge{background:linear-gradient(145deg,#281f27,#f1572e 42%,#43272a 47%,#141728 78%)}
+         .strike-arena-intel-column{display:grid;min-width:0;gap:9px;align-content:start}
+         .strike-arena-location{position:absolute;left:15px;top:14px;display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(255,255,255,.24);border-radius:999px;background:rgba(8,13,26,.48);color:#f7fbff;font:600 8px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.08em;backdrop-filter:blur(8px)}
+         .strike-arena-preview-icon{position:absolute;right:17px;bottom:12px;font-size:42px;filter:drop-shadow(0 5px 12px rgba(0,0,0,.45))}
+         .strike-arena-intel{padding:12px 14px;border:1px solid rgba(147,171,231,.18);border-radius:12px;background:linear-gradient(125deg,rgba(53,61,112,.25),rgba(20,29,53,.54))}
+         .strike-arena-intel-label{display:flex;align-items:center;gap:6px;color:#9db6ff;font:700 8px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.14em}
+         .strike-arena-intel h3{margin:7px 0 4px;color:#f3f5ff;font:700 14px var(--font-display,'Orbitron'),sans-serif}
+         .strike-arena-intel p{margin:0;color:#c1cde0;font-size:11px;line-height:1.5}
+         .strike-arena-tactic{display:flex;gap:8px;margin-top:9px;padding-top:9px;border-top:1px solid rgba(174,190,224,.13);color:#d7e5f7;font-size:10px;line-height:1.45}
+         .strike-arena-tactic svg{flex:0 0 auto;color:var(--arena-accent)}
+         .strike-rules{padding:12px;border:1px solid rgba(141,155,255,.24);border-radius:14px;background:linear-gradient(145deg,rgba(28,38,77,.48),rgba(11,20,39,.72));box-shadow:inset 0 1px rgba(255,255,255,.04)}
+         .strike-rules-title{display:flex;align-items:center;gap:8px;margin:0 0 9px;color:#eef2ff;font:700 9px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.13em}
+         .strike-rules-title svg{color:#c0a3ff}
+         .strike-rules-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:0;padding:0;list-style:none}
+         .strike-rule{display:flex;align-items:flex-start;gap:7px;padding:8px;border:1px solid rgba(169,188,225,.1);border-radius:9px;background:rgba(6,14,29,.48);color:#c0cee1;font-size:10px;line-height:1.4}
+         .strike-rule svg{flex:0 0 auto;margin-top:1px;color:#8ee9ff}
+         .strike-rule:nth-child(2) svg{color:#ffc86b}
+         .strike-rule:nth-child(3) svg{color:#a7f28a}
+         .strike-rule:nth-child(4) svg{color:#ff879d}
+         .strike-rule:nth-child(5) svg{color:#c3a2ff}
+         .strike-rule:nth-child(6) svg{color:#69e8db}
+         .strike-arena-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+         .strike-arena-actions .strike-phase-button{min-height:46px;margin-top:0;border:1px solid rgba(96,235,255,.7);border-radius:10px;background:linear-gradient(105deg,#087ea0,#4957c9 58%,#853cca);box-shadow:0 8px 22px rgba(41,106,223,.27);font-size:10px}
+         .strike-arena-actions .strike-phase-button:hover{filter:brightness(1.16)}
+         .strike-arena-actions .strike-phase-button.is-secondary{border-color:rgba(179,197,225,.25);background:rgba(26,35,55,.8);box-shadow:none}
+         .strike-phase-button:disabled{opacity:.5;cursor:wait}
+         @media(max-width:740px){.strike-phase-card.is-arena-picker{overflow:auto}.strike-briefing-layout{grid-template-columns:1fr}.strike-arena-showcase{min-height:165px}.strike-arena-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.strike-arena-option{min-height:76px;padding:8px}.strike-rules{padding:10px}}
+         @media(max-width:480px){.strike-briefing-head{margin-bottom:9px}.strike-briefing-emblem{width:29px;height:29px}.strike-briefing-title{font-size:21px}.strike-briefing-lead{font-size:10px}.strike-briefing-count{padding:6px 8px;font-size:7px}.strike-briefing-layout{gap:9px}.strike-arena-grid{gap:6px}.strike-arena-option{min-height:70px;padding:7px}.strike-arena-name{font-size:8px}.strike-arena-subtitle{font-size:8px}.strike-arena-icon{right:7px;top:5px;font-size:17px}.strike-arena-showcase{min-height:132px}.strike-arena-sun{width:34px;height:34px}.strike-arena-preview-icon{font-size:32px}.strike-arena-intel{padding:9px 10px}.strike-arena-intel h3{font-size:12px}.strike-arena-intel p{font-size:10px}.strike-rules-list{grid-template-columns:1fr 1fr;gap:5px}.strike-rule{gap:5px;padding:6px;font-size:9px}.strike-rule svg{width:13px;height:13px}.strike-arena-actions{gap:6px;margin-top:8px}.strike-arena-actions .strike-phase-button{min-height:41px;padding:8px 5px;font-size:8px}}
          .strike-phase-kicker{color:#73d9df;font:600 9px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.2em;text-transform:uppercase}
          .strike-phase-title{margin:10px 0 8px;color:#effcff;font:700 clamp(22px,5vw,30px) var(--font-display,'Orbitron'),sans-serif;letter-spacing:.09em}
          .strike-phase-copy{margin:0 auto 20px;max-width:420px;color:#a8c5d0;font-size:14px;line-height:1.6}
@@ -4703,8 +5117,14 @@ const GamePage = () => {
         <div className="strike-atmosphere-vignette" aria-hidden="true" />
         <header className="strike-top">
           <div className="strike-brand">
-            <button className="strike-back" onClick={() => navigate("/ruang-untuk-guru/numatik-game")} aria-label="Kembali ke menu Numatik Game">
-              <ArrowLeft size={14} /> MENU
+            <button
+              className="strike-back"
+              onClick={openArenaPicker}
+              disabled={gamePhase !== "combat" && gamePhase !== "paused" && gamePhase !== "gameover" && gamePhase !== "complete"}
+              aria-label="Pilih lokasi atau tempat perang"
+              title="Pilih lokasi perang"
+            >
+              <MapPin size={14} /> PILIH LOKASI
             </button>
             <svg className="strike-logo" viewBox="188 414 648 160" role="img" aria-label="Logo Numatik">
               <defs>
@@ -4714,7 +5134,7 @@ const GamePage = () => {
               </defs>
               <image href="/logo-numatik.png" x="0" y="0" width="1024" height="1024" preserveAspectRatio="xMidYMid meet" filter="url(#numatik-hud-ink)" />
             </svg>
-            <div><div className="strike-title">STRIKE</div><div className="strike-subtitle">Misi 5 peti harta karun</div></div>
+            <div><div className="strike-title">STRIKE</div><div className="strike-subtitle">{ARENAS.find((arena) => arena.id === selectedArena)?.name} · Misi 5 peti</div></div>
           </div>
           <div className="strike-header-actions">
             <div className="strike-status" role="status" aria-live="polite">
@@ -5017,6 +5437,92 @@ const GamePage = () => {
             </section>
           </div>
         )}
+        {gamePhase === "arena-select" && (
+          <div className="strike-phase-layer">
+            <section
+              className="strike-phase-card is-arena-picker"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="strike-arena-title"
+              aria-describedby="strike-arena-lead"
+            >
+              <header className="strike-briefing-head">
+                <div className="strike-briefing-kicker">
+                  <span className="strike-briefing-emblem"><Crosshair size={19} /></span>
+                  BRIEFING NUMATIK STRIKE
+                </div>
+                <span className="strike-briefing-count"><MapPin size={13} /> 06 MEDAN OPERASI</span>
+              </header>
+              <h2 className="strike-briefing-title" id="strike-arena-title">PILIH MEDAN TEMPUR</h2>
+              <p className="strike-briefing-lead" id="strike-arena-lead">Pilih lokasi, pelajari taktik, lalu pimpin operasi.</p>
+              <div className="strike-briefing-layout">
+                <div className="strike-arena-side">
+                  <div className="strike-arena-grid" role="group" aria-label="Pilihan lokasi perang">
+                    {ARENAS.map((arena) => (
+                      <button
+                        key={arena.id}
+                        className="strike-arena-option"
+                        type="button"
+                        style={{
+                          "--arena-accent": arena.accent,
+                          "--arena-horizon": arena.horizon,
+                        } as CSSProperties}
+                        aria-pressed={pendingArena === arena.id}
+                        onClick={() => setPendingArena(arena.id)}
+                      >
+                        {pendingArena === arena.id && <span className="strike-arena-selected">DIPILIH</span>}
+                        <span className="strike-arena-icon" aria-hidden="true">{arena.icon}</span>
+                        <span className="strike-arena-name">{arena.name}</span>
+                        <span className="strike-arena-subtitle">{arena.terrain}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <section className="strike-rules" aria-labelledby="strike-rules-title">
+                    <h3 className="strike-rules-title" id="strike-rules-title"><Shield size={15} /> PERATURAN OPERASI</h3>
+                    <ul className="strike-rules-list">
+                      <li className="strike-rule"><Trophy size={15} /><span>Kalahkan 10 musuh dan temukan 5 peti untuk menuntaskan misi.</span></li>
+                      <li className="strike-rule"><Crosshair size={15} /><span>Dekati peti lalu jawab soal matematika untuk membukanya.</span></li>
+                      <li className="strike-rule"><Package size={15} /><span>Selesaikan soal supply drop untuk mendapat amunisi, HP, atau armor.</span></li>
+                      <li className="strike-rule"><HeartPulse size={15} /><span>Jaga HP tetap di atas nol, berlindung, dan isi ulang senjata.</span></li>
+                      <li className="strike-rule"><Keyboard size={15} /><span>Laptop: WASD gerak · mouse bidik · klik kiri tembak · R isi ulang · Q senjata · P jeda.</span></li>
+                      <li className="strike-rule"><Hand size={15} /><span>Layar sentuh: joystick untuk bergerak, tombol aksi untuk bertempur.</span></li>
+                    </ul>
+                  </section>
+                </div>
+                <aside className="strike-arena-intel-column" style={arenaPreviewStyle}>
+                  <div
+                    key={previewArena.id}
+                    className={`strike-arena-showcase is-${previewArena.id}`}
+                    role="img"
+                    aria-label={`Pratinjau suasana ${previewArena.name}`}
+                  >
+                    <span className="strike-arena-sun" />
+                    <span className="strike-arena-location"><MapPin size={12} /> PRATINJAU MEDAN</span>
+                    <span className="strike-arena-ridge" />
+                    <span className="strike-arena-silhouette" aria-hidden="true"><i /><i /><i /></span>
+                    <span className="strike-arena-preview-icon" aria-hidden="true">{previewArena.icon}</span>
+                  </div>
+                  <section className="strike-arena-intel" aria-live="polite">
+                    <div className="strike-arena-intel-label"><Crosshair size={13} /> INTEL MEDAN</div>
+                    <h3>{previewArena.name}</h3>
+                    <p>{previewArena.subtitle}. {previewArena.description}</p>
+                    <div className="strike-arena-tactic"><Shield size={15} /><span><strong>Taktik:</strong> {previewArena.tactic}</span></div>
+                  </section>
+                </aside>
+              </div>
+              <div className="strike-arena-actions">
+                <button className="strike-phase-button" onClick={applyArenaSelection}>
+                  {hasStartedGame.current
+                    ? pendingArena === selectedArena ? "MULAI ULANG MISI" : "PILIH ARENA & MULAI"
+                    : `MULAI OPERASI · ${previewArena.name.toUpperCase()}`}
+                </button>
+                {hasStartedGame.current && (
+                  <button className="strike-phase-button is-secondary" onClick={closeArenaPicker}>BATAL</button>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
         {gamePhase === "paused" && (
           <div className="strike-phase-layer">
             <section className="strike-phase-card" role="dialog" aria-modal="true" aria-labelledby="strike-pause-title">
@@ -5025,6 +5531,7 @@ const GamePage = () => {
               <p className="strike-phase-copy">Skor saat ini: {score}. Lanjutkan permainan atau kembali ke menu.</p>
               <div className="strike-audio-state" role="status">Audio: {audioState}</div>
               {mobile && renderTouchControlSettings("pause")}
+              <button className="strike-phase-button is-secondary" onClick={openArenaPicker}>PILIH LOKASI PERANG</button>
               <button className="strike-phase-button" onClick={() => resumeGameRef.current?.()}>LANJUT BERMAIN</button>
               <button className="strike-phase-button is-secondary" onClick={() => navigate("/ruang-untuk-guru/numatik-game")}>KEMBALI KE MENU</button>
             </section>
@@ -5044,6 +5551,7 @@ const GamePage = () => {
                 <div className="strike-score-cell"><div className="strike-score-label">SKOR TERTINGGI</div><div className="strike-score-value">{bestScore}</div></div>
               </div>
               <button className="strike-phase-button" onClick={() => restartGameRef.current?.()}>MAIN LAGI</button>
+              <button className="strike-phase-button is-secondary" onClick={openArenaPicker}>PILIH LOKASI PERANG</button>
               <button className="strike-phase-button is-secondary" onClick={() => navigate("/ruang-untuk-guru/numatik-game")}>KEMBALI KE MENU</button>
             </section>
           </div>
