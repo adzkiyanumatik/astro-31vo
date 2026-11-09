@@ -822,7 +822,13 @@ const makeQuestion = (quizQuestion?: QuizQuestion): WorldQuestion => {
   return { prompt, answer: String(answer), options: options.map(String) };
 };
 
-const NumatikWorldPage = ({ treasureQuestions }: { treasureQuestions?: QuizQuestion[] } = {}) => {
+const NumatikWorldPage = ({
+  treasureQuestions,
+  backPath = "/math-game-arena/umum",
+}: {
+  treasureQuestions?: QuizQuestion[];
+  backPath?: string;
+} = {}) => {
   const navigate = useNavigate();
   const hostRef = useRef<HTMLDivElement>(null);
   const worldMusicRef = useRef<HTMLAudioElement>(null);
@@ -6038,8 +6044,8 @@ const NumatikWorldPage = ({ treasureQuestions }: { treasureQuestions?: QuizQuest
               <div className="world-start-top">
                 <button
                   className="world-start-back"
-                  onClick={() => avatarPickerOpen ? navigate("/ruang-untuk-guru/numatik-game") : setAvatarPickerOpen(true)}
-                  aria-label={avatarPickerOpen ? "Kembali ke menu Numatik Game" : "Kembali ke pemilihan avatar"}
+                  onClick={() => avatarPickerOpen ? navigate(backPath) : setAvatarPickerOpen(true)}
+                  aria-label={avatarPickerOpen ? "Kembali ke pilihan game" : "Kembali ke pemilihan avatar"}
                 >
                   <ArrowLeft size={15} /> {avatarPickerOpen ? "MENU" : "PILIH AVATAR"}
                 </button>

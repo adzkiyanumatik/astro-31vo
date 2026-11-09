@@ -355,7 +355,13 @@ const getQualityPixelRatio = (quality: QualitySetting) => (
   Math.min(window.devicePixelRatio || 1, QUALITY_PIXEL_RATIOS[quality])
 );
 
-const GamePage = ({ treasureQuestions }: { treasureQuestions?: QuizQuestion[] } = {}) => {
+const GamePage = ({
+  treasureQuestions,
+  backPath = "/math-game-arena/umum",
+}: {
+  treasureQuestions?: QuizQuestion[];
+  backPath?: string;
+} = {}) => {
   const navigate = useNavigate();
   const mountRef = useRef<HTMLDivElement>(null);
   const [locked, setLocked] = useState(false);
@@ -5598,7 +5604,7 @@ const GamePage = ({ treasureQuestions }: { treasureQuestions?: QuizQuestion[] } 
               <button
                 className="strike-arena-menu-button"
                 type="button"
-                onClick={() => navigate("/ruang-untuk-guru/numatik-game")}
+                onClick={() => navigate(backPath)}
               >KEMBALI KE MENU</button>
               <header className="strike-briefing-head">
                 <div className="strike-briefing-kicker">
@@ -5687,7 +5693,7 @@ const GamePage = ({ treasureQuestions }: { treasureQuestions?: QuizQuestion[] } 
               {mobile && renderTouchControlSettings("pause")}
               <button className="strike-phase-button is-secondary" onClick={openArenaPicker}>PILIH LOKASI PERANG</button>
               <button className="strike-phase-button" onClick={() => resumeGameRef.current?.()}>LANJUT BERMAIN</button>
-              <button className="strike-phase-button is-secondary" onClick={() => navigate("/ruang-untuk-guru/numatik-game")}>KEMBALI KE MENU</button>
+              <button className="strike-phase-button is-secondary" onClick={() => navigate(backPath)}>KEMBALI KE MENU</button>
             </section>
           </div>
         )}
@@ -5746,7 +5752,7 @@ const GamePage = ({ treasureQuestions }: { treasureQuestions?: QuizQuestion[] } 
               </div>
               <button className="strike-phase-button" onClick={() => restartGameRef.current?.()}>MAIN LAGI</button>
               <button className="strike-phase-button is-secondary" onClick={openArenaPicker}>PILIH LOKASI PERANG</button>
-              <button className="strike-phase-button is-secondary" onClick={() => navigate("/ruang-untuk-guru/numatik-game")}>KEMBALI KE MENU</button>
+              <button className="strike-phase-button is-secondary" onClick={() => navigate(backPath)}>KEMBALI KE MENU</button>
             </section>
           </div>
         )}

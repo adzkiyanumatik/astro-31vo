@@ -71,9 +71,9 @@ const SubmaterialGameDispatcher = () => {
 
   switch (variant) {
     case "numatik-strike":
-      return <NumatikStrikePage treasureQuestions={q.meteor} />;
+      return <NumatikStrikePage treasureQuestions={q.meteor} backPath={backPath} />;
     case "numatik-world":
-      return <NumatikWorldPage treasureQuestions={q.meteor} />;
+      return <NumatikWorldPage treasureQuestions={q.meteor} backPath={backPath} />;
     case "pesawat-tembak-meteor":
       return (
         <MeteorShootingGame

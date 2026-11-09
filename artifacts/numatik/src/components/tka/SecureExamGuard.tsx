@@ -58,10 +58,30 @@ export const SECURE_EXAM_COPY: Record<"id" | "en" | "ja", SecureExamLanguageCopy
 type UseSecureExamOptions = {
   active: boolean;
   submitted: boolean;
-  onAutoSubmit: () => void;
+  onViolation: (eventId: string) => Promise<{
+    violations: number;
+    autoSubmitted: boolean;
+    score?: number;
+    percentage?: number;
+    answeredCount?: number;
+    emailSent?: boolean;
+  }>;
+  onViolationError: (error: unknown) => void;
+  onAutoSubmit: (result: {
+    score?: number;
+    percentage?: number;
+    answeredCount?: number;
+    emailSent?: boolean;
+  }) => void;
 };
 
-export const useSecureExam = ({ active, submitted, onAutoSubmit }: UseSecureExamOptions) => {
+export const useSecureExam = ({
+  active,
+  submitted,
+  onViolation,
+  onViolationError,
+  onAutoSubmit,
+}: UseSecureExamOptions) => {
   const { language } = useLanguage();
   const copy = SECURE_EXAM_COPY[language];
   const nativeMode = Capacitor.isNativePlatform();
@@ -71,6 +91,8 @@ export const useSecureExam = ({ active, submitted, onAutoSubmit }: UseSecureExam
   const [isFullscreen, setIsFullscreen] = useState(() => nativeMode || Boolean(document.fullscreenElement));
   const violationRef = useRef(0);
   const autoSubmittedRef = useRef(false);
+  const lastViolationAtRef = useRef(0);
+  const violationQueueRef = useRef(Promise.resolve());
 
   const requestExamFullscreen = useCallback(async () => {
     if (nativeMode) {
@@ -97,22 +119,36 @@ export const useSecureExam = ({ active, submitted, onAutoSubmit }: UseSecureExam
     }
   }, [copy.fullscreenUnavailable, nativeMode]);
 
-  const recordViolation = useCallback(
-    () => {
+  const recordViolation = useCallback(() => {
       if (!active || submitted || autoSubmittedRef.current) return;
+      const now = Date.now();
+      if (now - lastViolationAtRef.current < 1_000) return;
+      lastViolationAtRef.current = now;
 
       const nextCount = Math.min(3, violationRef.current + 1);
       violationRef.current = nextCount;
       setViolations(nextCount);
       setDialogOpen(true);
 
-      if (nextCount >= 3) {
-        autoSubmittedRef.current = true;
-        window.setTimeout(onAutoSubmit, 0);
+      const eventId = globalThis.crypto?.randomUUID?.();
+      if (!eventId) {
+        onViolationError(new Error("Secure random IDs are unavailable in this browser."));
+        return;
       }
-    },
-    [active, onAutoSubmit, submitted],
-  );
+
+      violationQueueRef.current = violationQueueRef.current
+        .then(async () => {
+          const result = await onViolation(eventId);
+          const authoritativeCount = Math.min(3, result.violations);
+          violationRef.current = authoritativeCount;
+          setViolations(authoritativeCount);
+          if (result.autoSubmitted && !autoSubmittedRef.current) {
+            autoSubmittedRef.current = true;
+            onAutoSubmit(result);
+          }
+        })
+        .catch(onViolationError);
+    }, [active, onAutoSubmit, onViolation, onViolationError, submitted]);
 
   useEffect(() => {
     if (!active || submitted) return;
@@ -133,29 +169,76 @@ export const useSecureExam = ({ active, submitted, onAutoSubmit }: UseSecureExam
       recordViolation();
     };
 
+    const handleFocus = () => {
+      if (!document.hasFocus()) {
+        recordViolation();
+      }
+    };
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    const blockContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
+
+    const blockSelection = (event: Event) => {
+      event.preventDefault();
+    };
+
     const blockKeyboardShortcuts = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       const modifier = event.ctrlKey || event.metaKey;
       const blocked =
-        (modifier && ["c", "v", "u"].includes(key)) ||
-        (modifier && event.shiftKey && key === "i") ||
-        key === "f12";
+        (modifier && ["c", "v", "x", "u", "p", "s"].includes(key)) ||
+        (modifier && event.shiftKey && ["i", "j"].includes(key)) ||
+        (event.altKey && key === "tab") ||
+        key === "f12" ||
+        key === "printscreen";
 
-      if (blocked) event.preventDefault();
+      if (blocked) {
+        event.preventDefault();
+        recordViolation();
+      }
+    };
+
+    const blockClipboard = (event: ClipboardEvent) => {
+      if (event.clipboardData) {
+        event.preventDefault();
+        recordViolation();
+      }
     };
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("contextmenu", blockContextMenu);
+    document.addEventListener("dragstart", blockSelection);
+    document.addEventListener("selectstart", blockSelection);
+    document.addEventListener("copy", blockClipboard);
+    document.addEventListener("cut", blockClipboard);
+    document.addEventListener("paste", blockClipboard);
     document.addEventListener("keydown", blockKeyboardShortcuts);
 
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("contextmenu", blockContextMenu);
+      document.removeEventListener("dragstart", blockSelection);
+      document.removeEventListener("selectstart", blockSelection);
+      document.removeEventListener("copy", blockClipboard);
+      document.removeEventListener("cut", blockClipboard);
+      document.removeEventListener("paste", blockClipboard);
       document.removeEventListener("keydown", blockKeyboardShortcuts);
     };
-  }, [active, copy.violationTitle, nativeMode, recordViolation, submitted]);
+  }, [active, nativeMode, recordViolation, submitted]);
 
   useEffect(() => {
     if (!active) setDialogOpen(false);
@@ -170,6 +253,8 @@ export const useSecureExam = ({ active, submitted, onAutoSubmit }: UseSecureExam
   const resetSecurity = useCallback(() => {
     violationRef.current = 0;
     autoSubmittedRef.current = false;
+    lastViolationAtRef.current = 0;
+    violationQueueRef.current = Promise.resolve();
     setViolations(0);
     setDialogOpen(false);
     setFullscreenWarning("");

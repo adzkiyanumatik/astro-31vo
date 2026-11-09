@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
+import { processPendingTkaSubmissions } from "./routes/tkaTryout";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
@@ -30,5 +31,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+const tkaSessionWorker = setInterval(() => {
+  void processPendingTkaSubmissions().catch((err: unknown) => {
+    logger.error({ err }, "Could not process pending TKA exam submissions");
+  });
+}, 15_000);
+tkaSessionWorker.unref();
 
 export default app;

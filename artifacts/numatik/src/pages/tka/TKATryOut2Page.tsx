@@ -17,8 +17,16 @@ import Starfield from "@/components/Starfield";
 import PageNavigation from "@/components/PageNavigation";
 import { playPopSound } from "@/hooks/useAudio";
 import { SecureExamBadge, SecureExamDialog, useSecureExam } from "@/components/tka/SecureExamGuard";
-import { GoogleSignInButton, type GoogleSignInButtonHandle } from "@/components/tka/GoogleSignInButton";
-import { getTkaDeviceId } from "@/lib/tkaDeviceId";
+import TkaOtpVerification from "@/components/tka/TkaOtpVerification";
+import {
+  saveTkaExamAnswer,
+  startTkaExamSession,
+  submitTkaExamSession,
+  reportTkaExamViolation,
+  TkaExamApiError,
+  type TkaExamResult,
+  type TkaSessionCredentials,
+} from "@/lib/tkaExamApi";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 type Question = {
@@ -309,12 +317,12 @@ const TKATryOut2Page = () => {
   const [remaining, setRemaining] = useState(TOTAL_SECONDS);
   const [fullName, setFullName] = useState("");
   const [school, setSchool] = useState("");
+  const [preAuthToken, setPreAuthToken] = useState("");
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [startedAt, setStartedAt] = useState<string | null>(null);
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
   const [submissionError, setSubmissionError] = useState("");
-  const [googleSignedIn, setGoogleSignedIn] = useState(false);
   const [emailSent, setEmailSent] = useState<boolean | null>(null);
+  const [spreadsheetSaved, setSpreadsheetSaved] = useState<boolean | null>(null);
   const [finishedReason, setFinishedReason] = useState<"manual" | "time-up" | "security-violation">("manual");
   const [serverScore, setServerScore] = useState<number | null>(null);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
@@ -325,11 +333,10 @@ const TKATryOut2Page = () => {
     () => typeof window !== "undefined" && window.matchMedia("(orientation: landscape)").matches,
   );
   const finishingRef = useRef(false);
-  const googleButtonRef = useRef<GoogleSignInButtonHandle>(null);
-  const pendingSubmitReasonRef = useRef<"manual" | "time-up" | "security-violation" | null>(null);
-  const reauthRequiredRef = useRef(false);
-  const [reauthRequired, setReauthRequired] = useState(false);
-  const [isRefreshingToken, setIsRefreshingToken] = useState(false);
+  const serverSessionRef = useRef<TkaSessionCredentials | null>(null);
+  const answerSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const answerSaveErrorRef = useRef<unknown>(null);
+  const startingSessionRef = useRef(false);
 
   const question = QUESTIONS[current];
   const answeredCount = Object.keys(answers).length;
@@ -353,12 +360,26 @@ const TKATryOut2Page = () => {
         return;
       }
       setCountdown(null);
-      setStartedAt(new Date().toISOString());
-      setRemaining(TOTAL_SECONDS);
-      setStage("exam");
+      if (startingSessionRef.current || !preAuthToken) return;
+      startingSessionRef.current = true;
+      void startTkaExamSession(2, preAuthToken, fullName, school)
+        .then((session) => {
+          serverSessionRef.current = session;
+          setRemaining(TOTAL_SECONDS);
+          setStage("exam");
+        })
+        .catch((error: unknown) => {
+          startingSessionRef.current = false;
+          setSubmissionError(
+            error instanceof Error
+              ? error.message
+              : "Sesi ujian gagal dimulai. Verifikasi OTP kembali.",
+          );
+          setStage("biodata");
+        });
     }, 1000);
     return () => window.clearTimeout(timer);
-  }, [countdown, stage]);
+  }, [countdown, fullName, preAuthToken, school, stage]);
 
   useEffect(() => {
     if (stage !== "exam") return;
@@ -390,10 +411,40 @@ const TKATryOut2Page = () => {
     return () => mediaQuery.removeEventListener("change", handleOrientationChange);
   }, []);
 
-  const finishExam = async (
-    reason: "manual" | "time-up" | "security-violation",
-    reauthenticatedToken?: string,
-  ) => {
+  const translateApiError = (error: unknown) => {
+    const code = error instanceof TkaExamApiError ? error.code : undefined;
+    if (code === "DUPLICATE_SUBMISSION") {
+      return language === "en"
+        ? "This device or Google account has already started or submitted this try out."
+        : language === "ja"
+          ? "この端末またはGoogleアカウントでは、この試験をすでに開始または提出済みです。"
+          : "Perangkat atau akun Google ini sudah pernah memulai atau mengumpulkan try out ini.";
+    }
+    if (code === "EXAM_EXPIRED") {
+      return language === "en"
+        ? "The exam session has expired."
+        : language === "ja"
+          ? "試験セッションの有効期限が切れました。"
+          : "Sesi ujian sudah berakhir.";
+    }
+    return error instanceof Error
+      ? error.message
+      : language === "en"
+        ? "The exam server could not complete the request."
+        : language === "ja"
+          ? "試験サーバーでリクエストを完了できませんでした。"
+          : "Server ujian gagal menyelesaikan permintaan.";
+  };
+
+  const applyServerResult = (result: Partial<TkaExamResult>) => {
+    setServerScore(typeof result.score === "number" ? result.score : null);
+    setEmailSent(result.emailSent ?? false);
+    setSpreadsheetSaved(result.spreadsheetSaved ?? false);
+    setSubmissionState("saved");
+    setStage("submitted");
+  };
+
+  const finishExam = async (reason: "manual" | "time-up") => {
     if (stage !== "exam" || finishingRef.current) {
       console.warn("[TKA Paket 2] Submit diabaikan oleh guard frontend", {
         stage,
@@ -407,149 +458,40 @@ const TKATryOut2Page = () => {
     setFinishedReason(reason);
     setSubmissionState("saving");
     setSubmissionError("");
-    setIsRefreshingToken(true);
-
-    let freshGoogleIdToken = reauthenticatedToken;
     try {
-      if (!freshGoogleIdToken) {
-        if (!googleButtonRef.current) throw new Error("google-button-unavailable");
-        freshGoogleIdToken = await googleButtonRef.current.requestFreshCredential();
-        console.log("[TKA][Paket 2] Token berhasil diperbarui otomatis");
+      await answerSaveQueueRef.current;
+      if (answerSaveErrorRef.current) {
+        throw answerSaveErrorRef.current;
       }
+      const session = serverSessionRef.current;
+      if (!session) throw new Error("Sesi ujian server tidak tersedia.");
+      const result = await submitTkaExamSession(2, session, reason);
+      applyServerResult(result);
     } catch (error) {
-      console.warn("[TKA][Paket 2] Perlu login ulang saat submit", {
-        reason: error instanceof Error ? error.message : error,
-      });
-      pendingSubmitReasonRef.current = reason;
-      reauthRequiredRef.current = true;
+      console.error("[TKA Paket 2] Error saat submit", error);
       finishingRef.current = false;
-      setIsRefreshingToken(false);
-      setSubmissionState("idle");
-      setReauthRequired(true);
-      return;
-    }
-    setIsRefreshingToken(false);
-    setStage("submitted");
-
-    const durationSeconds = startedAt
-      ? Math.max(0, Math.min(TOTAL_SECONDS, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)))
-      : TOTAL_SECONDS - remaining;
-    let deviceId: string;
-    try {
-      deviceId = await getTkaDeviceId();
-    } catch (error) {
-      console.error("[TKA Paket 2] Device ID gagal dibuat", error);
       setSubmissionState("error");
-      setSubmissionError("Perangkat tidak dapat diverifikasi. Silakan coba lagi.");
-      return;
+      setSubmissionError(translateApiError(error));
     }
-
-    console.log("[TKA Paket 2] Mengirim submit ke API", {
-      endpoint: "/api/tka/tryout/2/submit",
-      answeredCount,
-      durationSeconds,
-      reason,
-      deviceIdSuffix: deviceId.slice(-8),
-    });
-
-    void fetch("/api/tka/tryout/2/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: fullName,
-        school,
-        idToken: freshGoogleIdToken,
-        answers,
-        deviceId,
-        startedAt,
-        submittedAt: new Date().toISOString(),
-        durationSeconds,
-        submitReason: reason,
-      }),
-    })
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        console.log("[TKA Paket 2] Respons submit diterima", {
-          status: response.status,
-          ok: response.ok,
-          data,
-        });
-        if (!response.ok) {
-          if (response.status === 409) {
-            console.warn("[TKA Paket 2] Submit ditolak karena sudah pernah submit", data);
-          }
-          console.error("[TKA Paket 2] API mengembalikan kegagalan submit", {
-            status: response.status,
-            data,
-          });
-          const translatedMessage =
-            data.code === "GOOGLE_AUTH_REQUIRED"
-              ? language === "en"
-                ? "Sign in with Google before submitting your answers."
-                : language === "ja"
-                  ? "解答を送信する前にGoogleでログインしてください。"
-                  : "Masuk dengan Google sebelum mengumpulkan jawaban."
-              : data.code === "GOOGLE_AUTH_INVALID"
-                ? language === "en"
-                  ? "Your Google sign-in is invalid or expired. Please sign in again."
-                  : language === "ja"
-                    ? "Googleログインが無効または期限切れです。もう一度ログインしてください。"
-                    : "Login Google tidak valid atau sudah kedaluwarsa. Silakan masuk kembali."
-                : data.code === "DUPLICATE_SUBMISSION"
-                  ? language === "en"
-                    ? "This device or Google account has already submitted this try out."
-                    : language === "ja"
-                      ? "この端末またはGoogleアカウントでは、この試験をすでに提出済みです。"
-                      : "Perangkat atau akun Google ini sudah pernah mengerjakan try out ini."
-                  : data.message;
-          throw new Error(translatedMessage || "Hasil belum berhasil disimpan.");
-        }
-        setServerScore(typeof data.score === "number" ? data.score : null);
-        setEmailSent(data.emailSent !== false);
-        setSubmissionState("saved");
-        if (data.emailSent === false) {
-          console.error("[TKA Paket 2] Spreadsheet berhasil, tetapi email dilaporkan gagal", data);
-        } else {
-          console.log("[TKA Paket 2] Spreadsheet dan email dilaporkan berhasil", data);
-        }
-      })
-      .catch((error: unknown) => {
-        console.error("[TKA Paket 2] Error saat submit", error);
-        setSubmissionState("error");
-        setSubmissionError(error instanceof Error ? error.message : "Hasil belum berhasil disimpan.");
-      });
-  };
-
-  const handleGoogleCredential = (credential: string) => {
-    console.log("[TKA Paket 2] Login Google berhasil diterima frontend");
-    setGoogleSignedIn(true);
-    setSubmissionError("");
-
-    if (!reauthRequiredRef.current) return;
-    reauthRequiredRef.current = false;
-    setReauthRequired(false);
-    const pendingReason = pendingSubmitReasonRef.current;
-    pendingSubmitReasonRef.current = null;
-    if (pendingReason) {
-      window.setTimeout(() => void finishExam(pendingReason, credential), 0);
-    }
-  };
-
-  const handleGoogleError = (errorCode: "google-script" | "google-init") => {
-    console.error("[TKA Paket 2] Google Sign-In gagal dimuat", { errorCode });
-    setSubmissionError(
-      language === "en"
-        ? "Google Sign-In could not be loaded. Please try again."
-        : language === "ja"
-          ? "Googleログインを読み込めませんでした。もう一度お試しください。"
-          : "Google Sign-In tidak dapat dimuat. Silakan coba lagi.",
-    );
   };
 
   const chooseAnswer = (optionIndex: number) => {
     if (stage !== "exam") return;
     playPopSound();
     setAnswers((previous) => ({ ...previous, [question.number]: optionIndex }));
+    const session = serverSessionRef.current;
+    if (!session) return;
+    answerSaveQueueRef.current = answerSaveQueueRef.current
+      .catch(() => undefined)
+      .then(() => saveTkaExamAnswer(2, session, question.number, optionIndex))
+      .then(() => {
+        answerSaveErrorRef.current = null;
+        setSubmissionError("");
+      })
+      .catch((error: unknown) => {
+        answerSaveErrorRef.current = error;
+        setSubmissionError(translateApiError(error));
+      });
   };
 
   const goTo = (index: number) => {
@@ -562,13 +504,13 @@ const TKATryOut2Page = () => {
       setSubmissionError("Nama lengkap dan asal sekolah wajib diisi.");
       return;
     }
-    if (!googleSignedIn) {
+    if (!preAuthToken) {
       setSubmissionError(
         language === "en"
-          ? "Sign in with Google before starting the try out."
+          ? "Verify your Google account and email OTP before starting."
           : language === "ja"
-            ? "試験を始める前にGoogleでログインしてください。"
-            : "Masuk dengan Google sebelum memulai try out.",
+            ? "開始前にGoogleアカウントとメールOTPを認証してください。"
+            : "Verifikasi akun Google dan kode OTP email sebelum memulai try out.",
       );
       return;
     }
@@ -579,8 +521,7 @@ const TKATryOut2Page = () => {
     playPopSound();
   };
 
-  const submitExam = (reason: "manual" | "security-violation" = "manual") => {
-    if (isRefreshingToken) return;
+  const submitExam = (reason: "manual" | "time-up" = "manual") => {
     setShowSubmitDialog(false);
     playPopSound();
     void finishExam(reason);
@@ -589,9 +530,20 @@ const TKATryOut2Page = () => {
   const security = useSecureExam({
     active: stage === "exam",
     submitted: stage === "submitted",
-    onAutoSubmit: () => {
+    onViolation: async (eventId) => {
+      const session = serverSessionRef.current;
+      if (!session) throw new Error("Sesi ujian server tidak tersedia.");
+      return reportTkaExamViolation(2, session, eventId);
+    },
+    onViolationError: (error) => {
+      console.error("[TKA][Paket 2] Pelanggaran gagal dicatat di server", error);
+      setSubmissionError(translateApiError(error));
+    },
+    onAutoSubmit: (result) => {
       console.error("[TKA][Paket 2] Auto-submit terpicu — pelanggaran ke-3 Mode Ujian Aman");
-      submitExam("security-violation");
+      finishingRef.current = true;
+      setFinishedReason("security-violation");
+      applyServerResult(result);
     },
   });
 
@@ -607,18 +559,18 @@ const TKATryOut2Page = () => {
     setRemaining(TOTAL_SECONDS);
     setFullName("");
     setSchool("");
-    setGoogleSignedIn(false);
+    setPreAuthToken("");
+    serverSessionRef.current = null;
+    answerSaveQueueRef.current = Promise.resolve();
+    answerSaveErrorRef.current = null;
+    startingSessionRef.current = false;
     setCountdown(null);
-    setStartedAt(null);
     setSubmissionState("idle");
     setSubmissionError("");
     setEmailSent(null);
+    setSpreadsheetSaved(null);
     setServerScore(null);
     setShowSubmitDialog(false);
-    setReauthRequired(false);
-    reauthRequiredRef.current = false;
-    pendingSubmitReasonRef.current = null;
-    setIsRefreshingToken(false);
     security.resetSecurity();
   };
 
@@ -688,14 +640,11 @@ const TKATryOut2Page = () => {
                     />
                   </label>
                 </div>
-                <div className="mt-5">
-                  <GoogleSignInButton
-                    language={language}
-                    signedIn={googleSignedIn}
-                    onCredential={handleGoogleCredential}
-                    onError={handleGoogleError}
-                  />
-                </div>
+                <TkaOtpVerification
+                  language={language}
+                  packageNumber={2}
+                  onVerified={setPreAuthToken}
+                />
                 {submissionError && <p className="mt-3 text-xs font-semibold text-rose-300">{submissionError}</p>}
                 <div className="mt-6 flex flex-col gap-2 sm:flex-row">
                   <button
@@ -706,7 +655,7 @@ const TKATryOut2Page = () => {
                   </button>
                   <button
                     onClick={startExam}
-                    disabled={!googleSignedIn}
+                    disabled={!preAuthToken}
                     className="inline-flex flex-[2] items-center justify-center gap-2 rounded-xl bg-emerald-500/20 px-4 py-3.5 text-sm font-bold text-emerald-100 ring-1 ring-emerald-300/40 transition hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     Mulai Try Out <ChevronRight className="h-4 w-4" />
@@ -797,8 +746,8 @@ const TKATryOut2Page = () => {
                     <p className="mt-2 text-xs font-semibold text-rose-200">{security.copy.autoSubmitNote}</p>
                   )}
                   {submissionState === "saving" && <p className="mt-2 text-xs text-amber-200">Menyimpan hasil ke spreadsheet...</p>}
-                  {submissionState === "saved" && emailSent !== false && <p className="mt-2 text-xs text-emerald-200">Hasil sudah masuk ke spreadsheet dan notifikasi email.</p>}
-                  {submissionState === "saved" && emailSent === false && <p className="mt-2 text-xs text-amber-200">Hasil sudah masuk ke spreadsheet, tetapi notifikasi email belum terkirim.</p>}
+                  {submissionState === "saved" && spreadsheetSaved && emailSent && <p className="mt-2 text-xs text-emerald-200">Hasil sudah masuk ke spreadsheet dan notifikasi email.</p>}
+                  {submissionState === "saved" && (!spreadsheetSaved || !emailSent) && <p className="mt-2 text-xs text-amber-200">Hasil sudah dikunci di server, tetapi pengiriman spreadsheet atau email sedang dicoba kembali.</p>}
                   {submissionState === "error" && <p className="mt-2 text-xs text-rose-300">{submissionError}</p>}
                 </div>
               </div>
@@ -960,62 +909,21 @@ const TKATryOut2Page = () => {
             {!submitted && current === QUESTIONS.length - 1 && (
               <button
                 onClick={() => setShowSubmitDialog(true)}
-                 disabled={isRefreshingToken}
+                 disabled={submissionState === "saving"}
                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-amber-300/30 bg-amber-500/10 px-4 py-3 text-xs font-bold text-amber-100 transition hover:bg-amber-500/20 disabled:cursor-wait disabled:opacity-70"
               >
-                 {isRefreshingToken
+                 {submissionState === "saving"
                    ? language === "en"
-                     ? "Verifying account..."
+                     ? "Saving answers..."
                      : language === "ja"
-                       ? "アカウントを確認中…"
-                       : "Memverifikasi akun…"
+                       ? "解答を保存中..."
+                       : "Menyimpan jawaban..."
                    : <><Send className="h-4 w-4" /> Selesai dan kumpulkan jawaban</>}
               </button>
             )}
           </section>
         </div>
       </main>
-
-      {stage === "exam" && (
-        <div
-          className={
-            reauthRequired
-              ? "fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
-              : "pointer-events-none fixed -left-[10000px] top-0 h-px w-px overflow-hidden"
-          }
-          role={reauthRequired ? "dialog" : undefined}
-          aria-modal={reauthRequired ? true : undefined}
-          aria-hidden={!reauthRequired}
-        >
-          <div className={reauthRequired ? "w-full max-w-md rounded-2xl border border-cyan-300/30 bg-slate-900 p-5 shadow-2xl shadow-black/50" : undefined}>
-            {reauthRequired && (
-              <div className="mb-4">
-                <h2 className="font-display text-lg font-bold text-white">
-                  {language === "en"
-                    ? "Sign in with Google again"
-                    : language === "ja"
-                      ? "Googleに再ログインしてください"
-                      : "Masuk dengan Google lagi"}
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-white/65">
-                  {language === "en"
-                    ? "Automatic account verification did not finish. Sign in again to submit your answers. Your answers are still saved."
-                    : language === "ja"
-                      ? "アカウントの自動確認を完了できませんでした。解答を提出するには、もう一度Googleでログインしてください。解答は保存されています。"
-                      : "Verifikasi akun otomatis tidak selesai. Masuk lagi dengan Google untuk mengirim jawaban. Jawaban Anda tetap tersimpan."}
-                </p>
-              </div>
-            )}
-            <GoogleSignInButton
-              ref={googleButtonRef}
-              language={language}
-              signedIn={false}
-              onCredential={handleGoogleCredential}
-              onError={handleGoogleError}
-            />
-          </div>
-        </div>
-      )}
 
       {showSubmitDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
@@ -1036,15 +944,15 @@ const TKATryOut2Page = () => {
               <button onClick={() => setShowSubmitDialog(false)} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-white/70 hover:bg-white/10">Kembali</button>
               <button
                 onClick={submitExam}
-                disabled={isRefreshingToken}
+                disabled={submissionState === "saving"}
                 className="flex-1 rounded-xl bg-amber-500/20 px-4 py-3 text-xs font-bold text-amber-100 ring-1 ring-amber-300/40 hover:bg-amber-500/30 disabled:cursor-wait disabled:opacity-60"
               >
-                {isRefreshingToken
+                {submissionState === "saving"
                   ? language === "en"
-                    ? "Verifying account..."
+                    ? "Saving answers..."
                     : language === "ja"
-                      ? "アカウントを確認中…"
-                      : "Memverifikasi akun…"
+                      ? "解答を保存中..."
+                      : "Menyimpan jawaban..."
                   : "Ya, kumpulkan"}
               </button>
             </div>
