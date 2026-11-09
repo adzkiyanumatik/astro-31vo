@@ -19,6 +19,24 @@ interface GameVariant {
 
 const VARIANTS: GameVariant[] = [
   {
+    name: "NUMATIK STRIKE",
+    emoji: "🎖️",
+    description: "Taklukkan misi tempur dengan 5 soal mudah dari sub-materi ini.",
+    variantSlug: "numatik-strike",
+    from: "#f59e0b",
+    to: "#ef4444",
+    glow: "rgba(245,158,11,0.8)",
+  },
+  {
+    name: "NUMATIK WORLD",
+    emoji: "🏝️",
+    description: "Jelajahi pulau dan buka 5 peti dengan soal dari sub-materi ini.",
+    variantSlug: "numatik-world",
+    from: "#22d3ee",
+    to: "#22c55e",
+    glow: "rgba(34,211,238,0.8)",
+  },
+  {
     name: "Pesawat Tembak Meteor",
     emoji: "☄️",
     description: "Tembak meteor berisi jawaban yang benar dari pesawat luar angkasamu.",
@@ -173,23 +191,34 @@ const SubmaterialGameVariantsChooser = () => {
         <div className="flex flex-col gap-3">
           {VARIANTS.map((v, i) => {
             const path = `/math-game-arena/kelas-7/${entry.parentSlug}/${entry.slug}/${v.variantSlug}`;
+            const isStrike = v.variantSlug === "numatik-strike";
+            const isWorld = v.variantSlug === "numatik-world";
+            const is3dGame = isStrike || isWorld;
             return (
               <button
                 key={v.name}
                 onClick={() => { playPopSound(); navigate(path); }}
-                className="group relative flex items-stretch overflow-hidden rounded-2xl text-left
-                  transition-all duration-300 animate-slide-up cursor-pointer hover:scale-[1.015]"
+                className={`group relative flex items-stretch overflow-hidden rounded-2xl text-left
+                  transition-all duration-300 animate-slide-up cursor-pointer hover:scale-[1.015]
+                  ${isStrike ? "border-2 border-amber-300/80 ring-1 ring-red-400/50" : ""}
+                  ${isWorld ? "border-2 border-cyan-300/80 ring-1 ring-emerald-300/50" : ""}`}
                 style={{
                   animationDelay: `${i * 0.05}s`,
-                  boxShadow: `0 2px 20px rgba(0,0,0,0.4)`,
+                  boxShadow: is3dGame
+                    ? `0 5px 0 ${isStrike ? "rgba(127,29,29,0.85)" : "rgba(6,95,70,0.85)"}, 0 8px 26px ${v.glow}`
+                    : `0 2px 20px rgba(0,0,0,0.4)`,
                 }}
                 onMouseEnter={(e) => {
                   (e.currentTarget as HTMLButtonElement).style.boxShadow =
-                    `0 4px 30px ${v.glow}, 0 2px 10px rgba(0,0,0,0.5)`;
+                    is3dGame
+                      ? `0 6px 0 ${isStrike ? "rgba(127,29,29,0.85)" : "rgba(6,95,70,0.85)"}, 0 12px 34px ${v.glow}`
+                      : `0 4px 30px ${v.glow}, 0 2px 10px rgba(0,0,0,0.5)`;
                 }}
                 onMouseLeave={(e) => {
                   (e.currentTarget as HTMLButtonElement).style.boxShadow =
-                    `0 2px 20px rgba(0,0,0,0.4)`;
+                    is3dGame
+                      ? `0 5px 0 ${isStrike ? "rgba(127,29,29,0.85)" : "rgba(6,95,70,0.85)"}, 0 8px 26px ${v.glow}`
+                      : `0 2px 20px rgba(0,0,0,0.4)`;
                 }}
               >
                 <div
@@ -197,7 +226,9 @@ const SubmaterialGameVariantsChooser = () => {
                   style={{ background: `linear-gradient(135deg, ${v.from}14, ${v.to}14)` }}
                 />
                 <div
-                  className="absolute inset-0 opacity-[0.10] group-hover:opacity-[0.18] transition-opacity duration-300"
+                  className={`absolute inset-0 transition-opacity duration-300 ${
+                    is3dGame ? "opacity-[0.24] group-hover:opacity-[0.36]" : "opacity-[0.10] group-hover:opacity-[0.18]"
+                  }`}
                   style={{ background: `linear-gradient(135deg, ${v.from}, ${v.to})` }}
                 />
                 <div className="absolute inset-0 border border-white/10 rounded-2xl" />
@@ -247,6 +278,18 @@ const SubmaterialGameVariantsChooser = () => {
 
                 <div className="relative flex-1 flex items-center gap-3 px-4 py-4 min-w-0">
                   <div className="min-w-0 flex-1">
+                    {is3dGame && (
+                      <div
+                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 mb-1.5 font-display text-[10px] font-black tracking-[0.12em] text-white shadow-[0_3px_0_rgba(0,0,0,0.55),0_0_14px_rgba(255,255,255,0.2)] ${
+                          isStrike
+                            ? "border-amber-200/80 bg-gradient-to-b from-amber-300 via-orange-500 to-red-600"
+                            : "border-cyan-100/80 bg-gradient-to-b from-cyan-300 via-teal-500 to-emerald-600"
+                        }`}
+                      >
+                        <span className="text-sm leading-none">3D</span>
+                        <span>GAME {isStrike ? "· STRIKE" : "· WORLD"}</span>
+                      </div>
+                    )}
                     <div className="font-display text-sm font-bold text-white leading-tight mb-1">
                       {v.name}
                     </div>

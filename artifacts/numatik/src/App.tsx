@@ -1842,6 +1842,7 @@ const AppInner = () => {
           <Route path="/math-game-arena/kelas-7/himpunan" element={<HimpunanMGAK7Page />} />
 
           {/* Math Game Arena - Kelas 7 catch-all chooser & dispatcher */}
+          <Route path="/math-game-arena/kelas-7/pilih/:parentSlug/:slug" element={<SubmaterialGameVariantsChooserK7 />} />
           <Route path="/math-game-arena/kelas-7/:parentSlug/:slug" element={<SubmaterialGameVariantsChooserK7 />} />
           <Route path="/math-game-arena/kelas-7/:parentSlug/:slug/:variant" element={<SubmaterialGameDispatcherK7 />} />
 
@@ -1860,6 +1861,7 @@ const AppInner = () => {
           <Route path="/math-game-arena/kelas-8/lingkaran" element={<LingkaranMGAK8Page />} />
           <Route path="/math-game-arena/kelas-8/garis-singgung-lingkaran" element={<GarisSinggungLingkaranMGAK8Page />} />
           <Route path="/math-game-arena/kelas-8/bangun-ruang-sisi-datar" element={<BangunRuangSisiDatarMGAK8Page />} />
+          <Route path="/math-game-arena/kelas-8/pilih/:parentSlug/:slug" element={<SubmaterialGameVariantsChooserK8 />} />
           <Route path="/math-game-arena/kelas-8/:parentSlug/:slug" element={<SubmaterialGameVariantsChooserK8 />} />
           <Route path="/math-game-arena/kelas-8/:parentSlug/:slug/:variant" element={<SubmaterialGameDispatcherK8 />} />
 
@@ -1872,6 +1874,7 @@ const AppInner = () => {
           <Route path="/math-game-arena/kelas-9/peluang" element={<PeluangMGAK9Page />} />
           <Route path="/math-game-arena/kelas-9/persamaan-kuadrat" element={<PersamaanKuadratMGAK9Page />} />
           <Route path="/math-game-arena/kelas-9/fungsi-kuadrat" element={<FungsiKuadratMGAK9Page />} />
+          <Route path="/math-game-arena/kelas-9/pilih/:parentSlug/:slug" element={<SubmaterialGameVariantsChooserK9 />} />
           <Route path="/math-game-arena/kelas-9/:parentSlug/:slug" element={<SubmaterialGameVariantsChooserK9 />} />
           <Route path="/math-game-arena/kelas-9/:parentSlug/:slug/:variant" element={<SubmaterialGameDispatcherK9 />} />
 

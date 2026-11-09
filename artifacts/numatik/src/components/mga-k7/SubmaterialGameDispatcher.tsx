@@ -10,6 +10,8 @@ import BrickBreakerPage from "@/pages/math-game-arena/umum/BrickBreakerPage";
 import GalaksiTempurPage from "@/pages/math-game-arena/umum/GalaksiTempurPage";
 import ZumaMathPage from "@/pages/math-game-arena/umum/ZumaMathPage";
 import PacmanMathPage from "@/pages/math-game-arena/umum/PacmanMathPage";
+import NumatikStrikePage from "@/pages/math-game-arena/umum/GamePage";
+import NumatikWorldPage from "@/pages/math-game-arena/umum/NumatikWorldPage";
 import { getSubmaterial } from "@/data/mga-k7/registry";
 import type { GuruQuestion } from "@/hooks/useGuruQuiz";
 import { useTranslation } from "react-i18next";
@@ -68,6 +70,10 @@ const SubmaterialGameDispatcher = () => {
   const q = entry.questions;
 
   switch (variant) {
+    case "numatik-strike":
+      return <NumatikStrikePage treasureQuestions={q.meteor} />;
+    case "numatik-world":
+      return <NumatikWorldPage treasureQuestions={q.meteor} />;
     case "pesawat-tembak-meteor":
       return (
         <MeteorShootingGame

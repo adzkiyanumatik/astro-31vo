@@ -7,8 +7,10 @@ import { BILANGAN_RASIONAL } from "./bilangan-rasional";
 import { ALJABAR } from "./aljabar";
 import { PLSV_PTLSV } from "./plsv-ptlsv";
 import { PERBANDINGAN } from "./perbandingan";
+import { BILANGAN_BULAT } from "./bilangan-bulat";
 
 const ALL_ENTRIES: SubmaterialEntry[] = [
+  ...BILANGAN_BULAT,
   ...ARITMETIKA_SOSIAL,
   ...GARIS_DAN_SUDUT,
   ...SEGITIGA_SEGIEMPAT,

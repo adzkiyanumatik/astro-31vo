@@ -145,27 +145,54 @@ const NumatikGamePage = () => {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-10">
-          {games.map((game, i) => (
+          {games.map((game, i) => {
+            const isStrike = game.path.endsWith("/numatik-strike");
+            const isWorld = game.path.endsWith("/numatik-world");
+            const is3dGame = isStrike || isWorld;
+            return (
             <button
               key={game.path}
               onClick={() => handleClick(game.path)}
-              className="group relative bg-card/80 backdrop-blur border border-border rounded-xl p-4
+              className={`group relative bg-card/80 backdrop-blur border rounded-xl p-4
                 hover:border-primary/60 hover:box-glow-cyan transition-all duration-300
-                cursor-pointer text-left animate-slide-up"
+                cursor-pointer text-left animate-slide-up ${
+                  isStrike
+                    ? "border-amber-300/80 ring-2 ring-amber-400/40 shadow-[0_5px_0_rgba(127,29,29,0.85),0_8px_24px_rgba(245,158,11,0.35)]"
+                    : isWorld
+                      ? "border-cyan-300/80 ring-2 ring-emerald-300/40 shadow-[0_5px_0_rgba(6,95,70,0.85),0_8px_24px_rgba(34,211,238,0.35)]"
+                      : "border-border"
+                }`}
               style={{ animationDelay: `${i * 0.04}s` }}
             >
-              <div className="flex items-center gap-2 mb-2">
-                {game.icon}
-                {game.emoji && <span className="text-xl">{game.emoji}</span>}
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  {game.icon}
+                  {game.emoji && <span className="text-xl">{game.emoji}</span>}
+                </div>
+                {is3dGame && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 font-display text-[9px] font-black tracking-wider text-white shadow-[0_3px_0_rgba(0,0,0,0.55)] ${
+                      isStrike
+                        ? "border-amber-200/80 bg-gradient-to-b from-amber-300 via-orange-500 to-red-600"
+                        : "border-cyan-100/80 bg-gradient-to-b from-cyan-300 via-teal-500 to-emerald-600"
+                    }`}
+                  >
+                    <span className="text-xs leading-none">3D</span>
+                    <span>GAME</span>
+                  </span>
+                )}
               </div>
-              <h3 className="font-display text-[11px] sm:text-xs font-bold text-foreground mb-1 leading-tight">
+              <h3 className={`font-display text-[11px] sm:text-xs font-bold mb-1 leading-tight ${
+                isStrike ? "text-amber-200" : isWorld ? "text-cyan-200" : "text-foreground"
+              }`}>
                 {game.label}
               </h3>
               <p className="text-[10px] text-muted-foreground leading-snug line-clamp-2">
                 {game.desc}
               </p>
             </button>
-          ))}
+            );
+          })}
         </div>
 
         <div className="text-center">

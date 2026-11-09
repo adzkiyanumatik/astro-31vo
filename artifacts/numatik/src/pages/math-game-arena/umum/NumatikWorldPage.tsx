@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { VertexNormalsHelper } from "three/addons/helpers/VertexNormalsHelper.js";
 import { useNavigate } from "react-router-dom";
+import type { QuizQuestion } from "@/components/MeteorShootingGame";
 import {
   buildCewekHalusGeometry,
   CEWEK_HALUS_BONE_NAMES,
@@ -70,8 +71,8 @@ const ISLANDS: IslandTheme[] = [
 
 type WorldQuestion = {
   prompt: string;
-  answer: number;
-  options: number[];
+  answer: string;
+  options: string[];
 };
 
 type Treasure = {
@@ -798,7 +799,14 @@ type DustParticle = {
   baseScale: number;
 };
 
-const makeQuestion = (): WorldQuestion => {
+const makeQuestion = (quizQuestion?: QuizQuestion): WorldQuestion => {
+  if (quizQuestion) {
+    return {
+      prompt: quizQuestion.question,
+      answer: quizQuestion.options[quizQuestion.correctIndex] ?? "",
+      options: quizQuestion.options,
+    };
+  }
   const first = 3 + Math.floor(Math.random() * 18);
   const second = 2 + Math.floor(Math.random() * 12);
   const useAddition = Math.random() > 0.45;
@@ -811,10 +819,10 @@ const makeQuestion = (): WorldQuestion => {
     choices.add(Math.max(0, answer + Math.floor(Math.random() * 13) - 6));
   }
   const options = [...choices].sort(() => Math.random() - 0.5);
-  return { prompt, answer, options };
+  return { prompt, answer: String(answer), options: options.map(String) };
 };
 
-const NumatikWorldPage = () => {
+const NumatikWorldPage = ({ treasureQuestions }: { treasureQuestions?: QuizQuestion[] } = {}) => {
   const navigate = useNavigate();
   const hostRef = useRef<HTMLDivElement>(null);
   const worldMusicRef = useRef<HTMLAudioElement>(null);
@@ -824,6 +832,9 @@ const NumatikWorldPage = () => {
   const movementStickPointerRef = useRef<number | null>(null);
   const pendingTreasureRef = useRef<Treasure | null>(null);
   const treasureFirstAttemptRef = useRef(true);
+  const treasureQuestionIndexRef = useRef(0);
+  const treasureQuestionsRef = useRef(treasureQuestions);
+  treasureQuestionsRef.current = treasureQuestions;
   const gameCompleteRef = useRef(false);
   const jumpRequestedRef = useRef(false);
   const [selectedIsland, setSelectedIsland] = useState<IslandId>("rainbow");
@@ -4781,7 +4792,7 @@ const NumatikWorldPage = () => {
           nearbyTreasure.group.visible = false;
           pendingTreasureRef.current = nearbyTreasure;
           treasureFirstAttemptRef.current = true;
-          setQuestion(makeQuestion());
+          setQuestion(makeQuestion(treasureQuestionsRef.current?.[treasureQuestionIndexRef.current]));
           setAnswerFeedback(null);
           setAnswerOutcome(null);
           setQuestionResolved(false);
@@ -5640,6 +5651,7 @@ const NumatikWorldPage = () => {
       return;
     }
     const collectedTreasureId = pendingTreasureRef.current.id;
+    treasureQuestionIndexRef.current += 1;
     if (treasureFirstAttemptRef.current) {
       setFirstTryCorrectCount((count) => count + 1);
     }
@@ -5668,6 +5680,7 @@ const NumatikWorldPage = () => {
     gameCompleteRef.current = false;
     setGameComplete(false);
     setTreasuresFound(0);
+    treasureQuestionIndexRef.current = 0;
     setFirstTryCorrectCount(0);
     setCollectedTreasureIds([]);
     setScore(0);
@@ -5680,6 +5693,7 @@ const NumatikWorldPage = () => {
     pendingTreasureRef.current = null;
   };
   const startAdventure = () => {
+    treasureQuestionIndexRef.current = 0;
     const music = worldMusicRef.current;
     if (music) {
       music.currentTime = 0;

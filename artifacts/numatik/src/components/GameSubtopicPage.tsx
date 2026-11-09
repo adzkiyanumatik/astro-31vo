@@ -36,6 +36,13 @@ const LEVEL_COLORS = [
   { from: "#f43f5e", to: "#fb923c", glow: "rgba(244,63,94,0.4)" },
 ];
 
+const getGameChooserPath = (path: string) => {
+  const match = path.match(/^\/math-game-arena\/kelas-(7|8|9)\/([^/]+)\/([^/]+)$/);
+  if (!match) return path;
+  const [, grade, parentSlug, slug] = match;
+  return `/math-game-arena/kelas-${grade}/pilih/${parentSlug}/${slug}`;
+};
+
 const GameSubtopicPage = ({
   title,
   subtopics,
@@ -73,8 +80,8 @@ const GameSubtopicPage = ({
             Math Game Arena
           </p>
           <div className="mt-3 flex items-center justify-center gap-2 text-[11px] font-body" style={{ color: "var(--text-secondary)" }}>
-            <span>☄️</span>
-            <span>{t('gameArena.meteorTagline')}</span>
+            <span>🎮</span>
+            <span>{t('gameArena.chooserTagline', { topic: title.toLowerCase() })}</span>
           </div>
         </div>
 
@@ -87,7 +94,7 @@ const GameSubtopicPage = ({
             return (
               <button
                 key={subtopic.name}
-                onClick={() => { playPopSound(); navigate(subtopic.path); }}
+                onClick={() => { playPopSound(); navigate(getGameChooserPath(subtopic.path)); }}
                 className={`water-btn group relative flex items-stretch overflow-hidden rounded-2xl text-left
                   transition-all duration-300 animate-slide-up
                   ${isComingSoon ? "cursor-default opacity-70" : "cursor-pointer hover:scale-[1.015]"}`}
@@ -194,7 +201,6 @@ const GameSubtopicPage = ({
                           >
                             🎯 {t('gameArena.fiveQuestions')}
                           </span>
-                          <span className="text-[9px] text-white/30">· {t('gameArena.meteorShooting')}</span>
                         </>
                       )}
                     </div>

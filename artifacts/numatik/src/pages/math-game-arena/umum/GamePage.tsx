@@ -10,6 +10,7 @@ import {
   Shield,
   Trophy,
 } from "lucide-react";
+import type { QuizQuestion } from "@/components/MeteorShootingGame";
 import { useNavigate } from "react-router-dom";
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -20,7 +21,7 @@ type BrightnessSetting = "normal" | "bright" | "very-bright";
 type WeaponId = "rifle" | "pistol";
 type GamePhase = "combat" | "supply" | "treasure" | "treasure-complete" | "paused" | "arena-select" | "gameover" | "complete";
 type ArenaId = "training" | "ruins" | "arctic" | "jungle";
-type SupplyQuestion = { prompt: string; answer: number; options: number[] };
+type SupplyQuestion = { prompt: string; answer: string; options: string[] };
 type SoundCue = "rifle" | "pistol" | "hit" | "headshot" | "enemy" | "wave" | "correct" | "wrong" | "gameover" | "reload" | "empty" | "step";
 type EnemyVoiceKind = "scream" | "death" | "hurt";
 type ImpactSurface = "wall" | "metal" | "ground";
@@ -338,14 +339,23 @@ const createSupplyQuestion = (waveNumber: number): SupplyQuestion => {
     const swapIndex = randomInt(0, index);
     [options[index], options[swapIndex]] = [options[swapIndex], options[index]];
   }
-  return { prompt, answer, options };
+  return { prompt, answer: String(answer), options: options.map(String) };
+};
+const createTreasureQuestion = (questionNumber: number, questions?: QuizQuestion[]): SupplyQuestion => {
+  const question = questions?.[questionNumber - 1];
+  if (!question) return createSupplyQuestion(questionNumber);
+  return {
+    prompt: question.question,
+    answer: question.options[question.correctIndex] ?? "",
+    options: question.options,
+  };
 };
 const QUALITY_PIXEL_RATIOS: Record<QualitySetting, number> = { low: 1, medium: 1.5, high: 2 };
 const getQualityPixelRatio = (quality: QualitySetting) => (
   Math.min(window.devicePixelRatio || 1, QUALITY_PIXEL_RATIOS[quality])
 );
 
-const GamePage = () => {
+const GamePage = ({ treasureQuestions }: { treasureQuestions?: QuizQuestion[] } = {}) => {
   const navigate = useNavigate();
   const mountRef = useRef<HTMLDivElement>(null);
   const [locked, setLocked] = useState(false);
@@ -390,6 +400,8 @@ const GamePage = () => {
   const treasureWrongAnswersRef = useRef(0);
   const [treasureQuizScore, setTreasureQuizScore] = useState(0);
   const treasureQuizScoreRef = useRef(0);
+  const treasureQuestionsRef = useRef(treasureQuestions);
+  treasureQuestionsRef.current = treasureQuestions;
   const treasureFirstAttemptRef = useRef(true);
   const [wave, setWave] = useState(1);
   const waveRef = useRef(1);
@@ -457,7 +469,7 @@ const GamePage = () => {
   const pauseGameRef = useRef<(() => void) | null>(null);
   const resumeGameRef = useRef<(() => void) | null>(null);
   const restartGameRef = useRef<(() => void) | null>(null);
-  const answerSupplyRef = useRef<((answer: number) => void) | null>(null);
+  const answerSupplyRef = useRef<((answer: string) => void) | null>(null);
   const nextWaveRef = useRef<(() => void) | null>(null);
   const soundRef = useRef<((cue: SoundCue) => void) | null>(null);
   const firingRef = useRef(false);
@@ -3892,14 +3904,14 @@ const GamePage = () => {
       treasureFirstAttemptRef.current = true;
       setPhase("treasure");
       setTreasureAnswerCorrect(null);
-      const question = createSupplyQuestion(Math.min(treasuresFoundRef.current + 1, TREASURE_COUNT));
+      const question = createTreasureQuestion(Math.min(treasuresFoundRef.current + 1, TREASURE_COUNT), treasureQuestionsRef.current);
       supplyQuestionRef.current = question;
       setSupplyQuestion(question);
       setSupplyMessage(null);
       supplyResolvedRef.current = false;
       playSound("wave");
     };
-    answerSupplyRef.current = (selectedAnswer: number) => {
+    answerSupplyRef.current = (selectedAnswer: string) => {
       const question = supplyQuestionRef.current;
       if ((gamePhaseRef.current !== "supply" && gamePhaseRef.current !== "treasure") || supplyResolvedRef.current || !question) return;
       supplyResolvedRef.current = true;
@@ -3970,7 +3982,7 @@ const GamePage = () => {
       }
       if (gamePhaseRef.current !== "treasure" || !supplyResolvedRef.current) return;
       if (activeTreasureRef.current) {
-        const question = createSupplyQuestion(Math.min(treasuresFoundRef.current + 1, TREASURE_COUNT));
+        const question = createTreasureQuestion(Math.min(treasuresFoundRef.current + 1, TREASURE_COUNT), treasureQuestionsRef.current);
         supplyQuestionRef.current = question;
         setSupplyQuestion(question);
         setSupplyMessage(null);
