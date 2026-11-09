@@ -632,7 +632,7 @@ type AvatarPreset = {
 const AVATAR_PRESETS: readonly AvatarPreset[] = [
   {
     id: "anak-cokelat",
-    name: "Anak Cokelat",
+    name: "Dery",
     description: "Hoodie krem dengan rambut cokelat",
     colors: { skin: "#f2c9a5", hair: "#7a4a32", hoodie: "#e8c98a", vest: "#3b3f44", pants: "#292c30", shoes: "#c98b4e" },
     hairstyle: "swept",
@@ -641,7 +641,7 @@ const AVATAR_PRESETS: readonly AvatarPreset[] = [
   },
   {
     id: "kacamata-hitam",
-    name: "Kacamata Hitam",
+    name: "Rhevan",
     description: "Rambut bergelombang, kacamata, dan suspender",
     colors: { skin: "#F3D2BC", hair: "#14110F", hoodie: "#F5F5F5", vest: "#111111", pants: "#1A1A1A", shoes: "#111111" },
     hairstyle: "wavy",
@@ -681,7 +681,7 @@ const AVATAR_PRESETS: readonly AvatarPreset[] = [
   },
   {
     id: "roblox-slim",
-    name: "Si Roblox",
+    name: "Regan",
     description: "Avatar ramping bergaya Roblox R15",
     colors: { skin: "#F3D2BC", hair: "#171313", hoodie: "#3188D8", vest: "#3188D8", pants: "#315C91", shoes: "#F5F5F5" },
     hairstyle: "short",
@@ -690,7 +690,7 @@ const AVATAR_PRESETS: readonly AvatarPreset[] = [
   },
   {
     id: "cewek-halus",
-    name: "Si Halus",
+    name: "Queen",
     description: "Kuncir tinggi dan jaket denim",
     colors: {
       skin: CEWEK_HALUS_CONFIG.skinColor,
@@ -706,7 +706,7 @@ const AVATAR_PRESETS: readonly AvatarPreset[] = [
   },
   {
     id: "cowok-kemeja",
-    name: "Si Kemeja",
+    name: "Agung",
     description: "Rambut pirang bob, flanel kotak, dan sneakers",
     colors: {
       skin: KEMEJA_CONFIG.colors.skin,
