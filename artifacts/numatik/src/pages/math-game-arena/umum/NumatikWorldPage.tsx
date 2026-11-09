@@ -94,6 +94,14 @@ type IslandInhabitant = {
 const TREASURE_COUNT = 5;
 const TREASURE_CORRECT_POINTS = 20;
 const TREASURE_WRONG_POINTS = 0;
+const TREASURE_RANKS = [
+  { title: "PANTANG MENYERAH", emoji: "🌱", description: "Setiap peti yang kamu taklukkan adalah langkah menjadi penjelajah hebat!" },
+  { title: "CALON PENJELAJAH", emoji: "🧭", description: "Awal petualangan yang hebat—terus asah ketajaman berhitungmu!" },
+  { title: "PETUALANG TANGGUH", emoji: "🗺️", description: "Kamu tetap gigih dan berhasil membawa pulang semua harta!" },
+  { title: "PEMBURU ANDAL", emoji: "🔎", description: "Insting penjelajahmu tajam. Tinggal selangkah lagi menuju kesempurnaan!" },
+  { title: "PENJELAJAH EMAS", emoji: "🏅", description: "Luar biasa! Hampir semua peti terbuka dengan jawaban tepat sejak awal!" },
+  { title: "LEGENDA HARTA", emoji: "👑", description: "Sempurna! Semua peti terbuka dengan jawaban benar pada percobaan pertama!" },
+] as const;
 const WORLD_RADIUS = 62;
 const RADAR_CENTER = 60;
 const RADAR_RADIUS = 48;
@@ -815,6 +823,7 @@ const NumatikWorldPage = () => {
   const movementStickRef = useRef({ x: 0, y: 0 });
   const movementStickPointerRef = useRef<number | null>(null);
   const pendingTreasureRef = useRef<Treasure | null>(null);
+  const treasureFirstAttemptRef = useRef(true);
   const gameCompleteRef = useRef(false);
   const jumpRequestedRef = useRef(false);
   const [selectedIsland, setSelectedIsland] = useState<IslandId>("rainbow");
@@ -827,6 +836,7 @@ const NumatikWorldPage = () => {
   const [musicError, setMusicError] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const [treasuresFound, setTreasuresFound] = useState(0);
+  const [firstTryCorrectCount, setFirstTryCorrectCount] = useState(0);
   const [collectedTreasureIds, setCollectedTreasureIds] = useState<number[]>([]);
   const [gameComplete, setGameComplete] = useState(false);
   const [question, setQuestion] = useState<WorldQuestion | null>(null);
@@ -4770,6 +4780,7 @@ const NumatikWorldPage = () => {
           nearbyTreasure.collected = true;
           nearbyTreasure.group.visible = false;
           pendingTreasureRef.current = nearbyTreasure;
+          treasureFirstAttemptRef.current = true;
           setQuestion(makeQuestion());
           setAnswerFeedback(null);
           setAnswerOutcome(null);
@@ -5622,12 +5633,16 @@ const NumatikWorldPage = () => {
     if (!question || !pendingTreasureRef.current || questionResolved) return;
     setAnswerOutcome(null);
     if (answer !== question.answer) {
+      treasureFirstAttemptRef.current = false;
       setWrongAnswerCount((count) => count + 1);
       setAnswerOutcome("wrong");
       setAnswerFeedback(`Belum tepat! +${TREASURE_WRONG_POINTS} poin. Coba hitung sekali lagi.`);
       return;
     }
     const collectedTreasureId = pendingTreasureRef.current.id;
+    if (treasureFirstAttemptRef.current) {
+      setFirstTryCorrectCount((count) => count + 1);
+    }
     setCollectedTreasureIds((ids) => [...ids, collectedTreasureId]);
     const nextTreasuresFound = treasuresFound + 1;
     setTreasuresFound(nextTreasuresFound);
@@ -5653,6 +5668,7 @@ const NumatikWorldPage = () => {
     gameCompleteRef.current = false;
     setGameComplete(false);
     setTreasuresFound(0);
+    setFirstTryCorrectCount(0);
     setCollectedTreasureIds([]);
     setScore(0);
     setQuestion(null);
@@ -5782,9 +5798,11 @@ const NumatikWorldPage = () => {
     { key: "lockSecondaryMotion", label: "Kunci rambut/headset" },
   ];
 
+  const treasureRank = TREASURE_RANKS[firstTryCorrectCount] ?? TREASURE_RANKS[0];
+
   return (
     <main className="world-page">
-      <audio ref={worldMusicRef} src="/numatik-world-music.mp3" loop preload="auto" />
+      <audio ref={worldMusicRef} src="/music/numatik-world.mp3" loop preload="auto" />
       <style>{`
         .world-page{position:relative;width:100%;height:100dvh;min-height:100dvh;overflow:hidden;background:#85dfff;color:#fff;font-family:var(--font-body,'Exo 2'),sans-serif}
         .world-canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
@@ -5853,10 +5871,29 @@ const NumatikWorldPage = () => {
         .world-feedback.is-wrong{color:#d66b32;animation:world-answer-wrong .35s ease-out}
         @keyframes world-answer-correct{0%{transform:scale(.75);opacity:.4}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
         @keyframes world-answer-wrong{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-        .world-complete-score{margin:18px auto;padding:16px;border:2px solid rgba(255,255,255,.9);border-radius:20px;background:linear-gradient(135deg,#e1faff,#dcffe9);color:#219b83}
-        .world-complete-score strong{display:block;font:900 clamp(34px,8vw,48px) var(--font-display,'Orbitron'),sans-serif}
-        .world-complete-score span{font-size:12px;font-weight:800}
-        .world-complete-details{margin:10px 0 20px;color:#527294;font-size:13px;font-weight:700}
+        .world-question-layer.is-complete{background:radial-gradient(ellipse at 50% 42%,rgba(54,128,183,.22),rgba(17,49,89,.72));backdrop-filter:blur(8px)}
+        .world-complete-card{position:relative;width:min(520px,calc(100vw - 28px));max-height:calc(100dvh - 28px);overflow:auto;border:3px solid #fff4bb;background:radial-gradient(ellipse at 50% 0%,#fff7d7 0%,transparent 42%),linear-gradient(155deg,#fff,#eaf8ff 72%);box-shadow:0 0 0 5px rgba(255,206,77,.26),0 28px 80px rgba(21,62,107,.46);animation:world-treasure-arrive .65s cubic-bezier(.18,.8,.24,1) both}
+        .world-complete-card:before,.world-complete-card:after{position:absolute;top:-35px;width:110px;height:110px;border:1px solid rgba(255,191,52,.35);border-radius:50%;content:"";pointer-events:none}
+        .world-complete-card:before{left:-45px;box-shadow:0 0 0 13px rgba(255,199,62,.08),0 0 0 27px rgba(255,199,62,.06)}
+        .world-complete-card:after{right:-45px;box-shadow:0 0 0 13px rgba(255,199,62,.08),0 0 0 27px rgba(255,199,62,.06)}
+        @keyframes world-treasure-arrive{from{opacity:0;transform:translateY(22px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
+        .world-complete-sparkles{position:relative;z-index:1;margin:0 0 4px;color:#e3a817;font-size:17px;letter-spacing:.55em}
+        .world-complete-kicker{position:relative;z-index:1;color:#208f80;font:900 10px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.18em}
+        .world-complete-medal{position:relative;z-index:1;display:grid;place-items:center;width:78px;height:78px;margin:14px auto 10px;border:3px solid #fff;border-radius:26px;background:linear-gradient(145deg,#ffe78e,#ffb737);box-shadow:0 5px 0 #e69b25,0 12px 24px rgba(189,130,38,.26);font-size:40px;transform:rotate(-5deg)}
+        .world-complete-card .world-question-title{position:relative;z-index:1;margin:8px 0;color:#315d87;font-size:clamp(20px,5vw,27px);text-shadow:0 2px 0 #fff}
+        .world-complete-copy{position:relative;z-index:1;max-width:380px;margin:0 auto 15px;color:#6982a1;font-size:13px;font-weight:700;line-height:1.55}
+        .world-complete-chests{position:relative;z-index:1;display:flex;justify-content:center;gap:8px;margin:14px 0}
+        .world-complete-chest{display:grid;place-items:center;width:42px;height:42px;border:2px solid #d5e4ef;border-radius:14px;background:#f0f5f8;color:#9badbc;font-size:20px;filter:grayscale(1);opacity:.64}
+        .world-complete-chest.is-earned{border-color:#ffd766;background:linear-gradient(145deg,#fff6c8,#ffdc6b);color:#9e6814;filter:none;opacity:1;box-shadow:0 3px 0 #e8ad35,0 0 16px rgba(255,202,67,.3);animation:world-chest-pop .4s ease-out both}
+        @keyframes world-chest-pop{from{transform:translateY(6px) scale(.8)}to{transform:translateY(0) scale(1)}}
+        .world-complete-score{position:relative;z-index:1;display:flex;justify-content:space-between;align-items:center;gap:12px;margin:17px 0 12px;padding:13px 17px;border:1px solid #bde9dc;border-radius:18px;background:linear-gradient(135deg,#e1faff,#dcffe9);color:#219b83;text-align:left}
+        .world-complete-score span{font-size:10px;font-weight:900;letter-spacing:.09em}
+        .world-complete-score strong{font:900 clamp(30px,8vw,40px) var(--font-display,'Orbitron'),sans-serif}
+        .world-complete-stats{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 17px}
+        .world-complete-stat{padding:10px 7px;border:1px solid #dceaf4;border-radius:14px;background:rgba(255,255,255,.78);color:#527294;font-size:10px;font-weight:800}
+        .world-complete-stat strong{display:block;margin-bottom:3px;color:#3672cb;font:900 17px var(--font-display,'Orbitron'),sans-serif}
+        .world-complete-card .world-start-button{position:relative;z-index:1;margin-top:8px}
+        @media(prefers-reduced-motion:reduce){.world-complete-card,.world-complete-chest.is-earned{animation:none}}
         .world-error{display:grid;place-items:center;height:100%;padding:24px;color:#315d87;text-align:center;font-weight:700}
         .world-start-screen{position:absolute;z-index:5;inset:0;overflow:auto;display:grid;place-items:center;padding:clamp(16px,4vw,40px);background:radial-gradient(ellipse at 10% 12%,rgba(255,255,255,.92),transparent 30%),radial-gradient(ellipse at 90% 85%,rgba(255,221,139,.65),transparent 34%),linear-gradient(145deg,#65d8ed 0%,#8fcef9 48%,#b5a2f5 100%);color:#34547d}
         .world-start-content{width:min(1060px,100%);margin:auto}
@@ -6255,16 +6292,28 @@ const NumatikWorldPage = () => {
           </aside>
         )}
         {gameComplete && (
-          <div className="world-question-layer">
-            <section className="world-question-card" role="dialog" aria-modal="true" aria-labelledby="world-complete-title">
-              <div className="world-question-kicker">🎉 PETUALANGAN SELESAI</div>
-              <h2 className="world-question-title" id="world-complete-title">Semua harta ditemukan!</h2>
-              <p className="world-lobby-intro">Kamu berhasil menjawab semua pertanyaan harta karun!</p>
-              <div className="world-complete-score">
-                <strong>{score}</strong>
-                <span>POIN TERKUMPUL · MAKSIMAL {TREASURE_COUNT * TREASURE_CORRECT_POINTS}</span>
+          <div className="world-question-layer is-complete">
+            <section className="world-question-card world-complete-card" role="dialog" aria-modal="true" aria-labelledby="world-complete-title">
+              <div className="world-complete-sparkles" aria-hidden="true">✦ ✧ ✦</div>
+              <div className="world-complete-kicker">🎉 PETUALANGAN SELESAI · {ISLANDS.find(({ id }) => id === selectedIsland)?.name.toUpperCase() ?? "PULAU"}</div>
+              <div className="world-complete-medal" aria-hidden="true">{treasureRank.emoji}</div>
+              <h2 className="world-question-title" id="world-complete-title">{treasureRank.title}</h2>
+              <p className="world-complete-copy">{treasureRank.description}</p>
+              <div className="world-complete-chests" role="img" aria-label={`${firstTryCorrectCount} dari ${TREASURE_COUNT} peti dijawab benar pada percobaan pertama`}>
+                {Array.from({ length: TREASURE_COUNT }, (_, index) => (
+                  <span key={index} className={`world-complete-chest${index < firstTryCorrectCount ? " is-earned" : ""}`} aria-hidden="true">
+                    {index < firstTryCorrectCount ? "🪙" : "🔒"}
+                  </span>
+                ))}
               </div>
-              <p className="world-complete-details">{treasuresFound}/{TREASURE_COUNT} jawaban benar · {wrongAnswerCount} jawaban salah bernilai {TREASURE_WRONG_POINTS} poin</p>
+              <div className="world-complete-score">
+                <span>POIN HARTA<br />TERKUMPUL</span>
+                <strong>{score}</strong>
+              </div>
+              <div className="world-complete-stats">
+                <div className="world-complete-stat"><strong>{firstTryCorrectCount}/{TREASURE_COUNT}</strong>BENAR SEKALI COBA</div>
+                <div className="world-complete-stat"><strong>{wrongAnswerCount}</strong>JAWABAN KELIRU</div>
+              </div>
               <button className="world-start-button" type="button" onClick={restartAdventure}>MAIN LAGI</button>
             </section>
           </div>

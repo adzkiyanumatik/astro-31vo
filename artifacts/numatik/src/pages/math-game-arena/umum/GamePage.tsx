@@ -134,6 +134,14 @@ const STARTING_ENEMIES = 10;
 const TREASURE_COUNT = 5;
 const TREASURE_CORRECT_POINTS = 20;
 const TREASURE_WRONG_POINTS = 0;
+const TREASURE_RANKS = [
+  { title: "PANTANG MENYERAH", emoji: "🌱", description: "Misi harta selesai! Terus asah insting dan strategi berhitungmu." },
+  { title: "CALON PENJELAJAH", emoji: "🧭", description: "Operasi sukses! Kamu sudah punya bekal untuk jadi pemburu harta elite." },
+  { title: "PETUALANG TANGGUH", emoji: "🗺️", description: "Tangguh di medan tempur, gigih memecahkan soal. Semua peti berhasil diamankan!" },
+  { title: "PEMBURU ANDAL", emoji: "🔎", description: "Bidikanmu tepat dan hitunganmu tajam—tinggal selangkah dari sempurna!" },
+  { title: "PENJELAJAH EMAS", emoji: "🏅", description: "Operasi nyaris sempurna! Hampir semua peti terbuka tanpa kesalahan." },
+  { title: "LEGENDA HARTA", emoji: "👑", description: "Sempurna, Komandan! Semua peti terbuka dengan jawaban benar sejak percobaan pertama." },
+] as const;
 const GUNFIRE_ALERT_RADIUS = 36;
 const ARENAS: Array<{
   id: ArenaId;
@@ -4969,6 +4977,7 @@ const GamePage = () => {
     "--arena-accent": previewArena.accent,
     "--arena-ground": previewArena.ground,
   } as CSSProperties;
+  const treasureRank = TREASURE_RANKS[treasureCorrectAnswers] ?? TREASURE_RANKS[0];
 
   return (
     <main className="strike-page">
@@ -5080,6 +5089,19 @@ const GamePage = () => {
          .strike-back:hover{border-color:rgba(60,220,233,.55);color:#e9fbff}
          .strike-phase-layer{position:absolute;z-index:6;inset:0;display:grid;place-items:center;padding:16px;background:rgba(3,10,18,.78);backdrop-filter:blur(7px);pointer-events:auto}
          .strike-phase-card{width:min(520px,calc(100vw - 28px));max-height:calc(100dvh - 32px);overflow:auto;padding:clamp(22px,5vw,38px);border:1px solid rgba(92,220,230,.38);background:linear-gradient(145deg,rgba(9,28,42,.98),rgba(6,14,27,.98));box-shadow:0 24px 90px rgba(0,0,0,.42);text-align:center}
+         .strike-phase-card.is-treasure-results{position:relative;border-color:rgba(255,215,112,.7);background:radial-gradient(ellipse at 50% -10%,rgba(211,151,60,.2),transparent 48%),linear-gradient(150deg,rgba(13,31,45,.99),rgba(6,14,27,.99));box-shadow:0 0 0 1px rgba(255,215,112,.12),0 0 48px rgba(225,166,63,.13),0 24px 90px rgba(0,0,0,.58);animation:str-result-arrive .55s cubic-bezier(.18,.8,.24,1) both}
+         @keyframes str-result-arrive{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+         .strike-result-sparkles{margin:0 0 8px;color:#ffd77c;font-size:16px;letter-spacing:.55em}
+         .strike-result-medal{display:grid;place-items:center;width:70px;height:70px;margin:12px auto;border:1px solid rgba(255,224,145,.9);border-radius:22px;background:linear-gradient(145deg,#ffe9a7,#e69c37);box-shadow:0 5px 0 #9c6226,0 0 32px rgba(255,194,81,.26);font-size:36px;transform:rotate(-5deg)}
+         .strike-result-rank{margin:8px 0;color:#ffe29b;font:800 clamp(19px,4.8vw,27px) var(--font-display,'Orbitron'),sans-serif;letter-spacing:.07em;text-shadow:0 0 24px rgba(255,203,104,.28)}
+         .strike-result-copy{max-width:430px;margin:0 auto 13px;color:#b1c9d0;font-size:13px;line-height:1.55}
+         .strike-result-chests{display:flex;justify-content:center;gap:8px;margin:15px 0 18px}
+         .strike-result-chest{display:grid;place-items:center;width:42px;height:42px;border:1px solid rgba(171,195,206,.24);border-radius:10px;background:rgba(3,14,24,.7);color:#78909a;font-size:20px;filter:grayscale(1);opacity:.58}
+         .strike-result-chest.is-earned{border-color:rgba(255,214,105,.72);background:linear-gradient(145deg,rgba(255,221,127,.23),rgba(122,76,26,.27));color:#ffe59b;filter:none;opacity:1;box-shadow:inset 0 0 15px rgba(255,195,73,.1),0 0 12px rgba(255,195,73,.12);animation:str-chest-pop .35s ease-out both}
+         @keyframes str-chest-pop{from{transform:translateY(5px) scale(.8)}to{transform:translateY(0) scale(1)}}
+         .strike-phase-card.is-treasure-results .strike-score-summary{margin:17px 0}
+         .strike-phase-card.is-treasure-results .strike-score-cell{border-color:rgba(255,220,145,.2);background:rgba(3,14,24,.64)}
+         .strike-phase-card.is-treasure-results .strike-score-value{color:#fff0c4}
          .strike-phase-card.is-arena-picker{width:min(1080px,calc(100vw - 28px));max-height:calc(100dvh - 24px);padding:clamp(15px,2.4vw,27px);border-color:rgba(111,224,255,.55);background:radial-gradient(ellipse at 9% 0%,rgba(27,136,174,.22),transparent 40%),radial-gradient(ellipse at 100% 100%,rgba(112,61,198,.19),transparent 42%),linear-gradient(145deg,rgba(7,19,37,.98),rgba(8,12,27,.99));text-align:left}
          .strike-arena-menu-button{display:inline-flex;align-items:center;gap:7px;min-height:34px;margin:0 0 12px;padding:7px 11px;border:1px solid rgba(144,203,218,.35);border-radius:7px;background:rgba(5,16,28,.72);color:#c6e2ea;font:600 8px var(--font-display,'Orbitron'),sans-serif;letter-spacing:.08em;cursor:pointer}
          .strike-arena-menu-button:hover{border-color:rgba(60,220,233,.7);background:rgba(17,67,82,.6);color:#e9fbff}
@@ -5225,7 +5247,7 @@ const GamePage = () => {
          @media(orientation:landscape) and (max-height:500px){
            .strike-stick{left:max(12px,env(safe-area-inset-left));bottom:max(12px,env(safe-area-inset-bottom));width:100px;height:100px}
          }
-        @media(prefers-reduced-motion:reduce){.strike-lock{transition:none}}
+        @media(prefers-reduced-motion:reduce){.strike-lock{transition:none}.strike-phase-card.is-treasure-results,.strike-result-chest.is-earned{animation:none}}
       `}</style>
       <div ref={mountRef} className="absolute inset-0" />
       <div className="strike-hud">
@@ -5659,14 +5681,19 @@ const GamePage = () => {
         )}
         {gamePhase === "treasure-complete" && (
           <div className="strike-phase-layer">
-            <section className="strike-phase-card" role="dialog" aria-modal="true" aria-labelledby="strike-treasure-complete-title">
-              <div className="strike-phase-kicker">Seluruh peti harta karun berhasil dibuka!</div>
-              <h2 className="strike-phase-title" id="strike-treasure-complete-title">SELAMAT!</h2>
-              <p className="strike-phase-copy">
-                {treasureCorrectAnswers === TREASURE_COUNT
-                  ? "Luar biasa! Semua soal dijawab benar pada percobaan pertama."
-                  : "Hebat! Kamu berhasil menyelesaikan seluruh soal harta karun."}
-              </p>
+            <section className="strike-phase-card is-treasure-results" role="dialog" aria-modal="true" aria-labelledby="strike-treasure-complete-title">
+              <div className="strike-result-sparkles" aria-hidden="true">✦ ✧ ✦</div>
+              <div className="strike-phase-kicker">DEBRIEF OPERASI · SELURUH PETI DIAMANKAN</div>
+              <div className="strike-result-medal" aria-hidden="true">{treasureRank.emoji}</div>
+              <h2 className="strike-result-rank" id="strike-treasure-complete-title">{treasureRank.title}</h2>
+              <p className="strike-result-copy">{treasureRank.description}</p>
+              <div className="strike-result-chests" role="img" aria-label={`${treasureCorrectAnswers} dari ${TREASURE_COUNT} peti dijawab benar pada percobaan pertama`}>
+                {Array.from({ length: TREASURE_COUNT }, (_, index) => (
+                  <span key={index} className={`strike-result-chest${index < treasureCorrectAnswers ? " is-earned" : ""}`} aria-hidden="true">
+                    {index < treasureCorrectAnswers ? "🪙" : "🔒"}
+                  </span>
+                ))}
+              </div>
               <div className="strike-score-summary">
                 <div className="strike-score-cell">
                   <div className="strike-score-label">SKOR PERTANYAAN</div>
